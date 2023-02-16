@@ -12,7 +12,18 @@ parser = argparse.ArgumentParser()
 Data.
 """
 
-gpu = 1
+""" 
+dataset: 
+    (for MCS)
+    debug, mini_debug, debug_no-1, mini_debug_no-1 debug_single_iso
+    mcsplain mcsplain-connected sip (tune sip with smaller D/batch_size)
+    ptc redditmulti10k
+    mcs33ve (dropped) mcs33ve-connected (dropped)
+    aids700nef linux imdbmulti ptc nci109 webeasy redditmulti10k mutag
+    (for similarity)
+    aids700nef_old linux_old imdbmulti_old ptc_old aids700nef_old_small
+"""
+gpu = 0
 device = str('cuda:{}'.format(gpu) if torch.cuda.is_available() and gpu != -1
              else 'cpu')
 parser.add_argument('--device', default=device)
@@ -149,7 +160,7 @@ sample_all_edges_thresh = -1
 
 # TODO: try with Q_BD
 Q_BD = True
-beta_reward = 0  # 'UB-single' #minG, minG-single, UB-single, UB
+beta_reward = 0  # 'UB-single' #minG, minG-single, UB-single, UB  DEPRECATED
 regret_iters = 3
 
 mcsp_before_perc = 0.1  # tune to 1.0
@@ -158,8 +169,8 @@ total_runtime = -1  # 100000 # msec
 save_every_recursion_count = -1  # 2000#500 if huge_graph else 100
 save_every_runtime = -1  # 10000 # msec
 
-loss_fun = 'mse'  # 'mse-minG-sm' # 'mse-tgt' #huber_loss, UBLB_loss, A2C, mse-tgt, scaled_mse-LB
-q_signal = 'fitted-tgt-random-path'  # vanilla-tgt-clamp
+loss_fun = 'mse'  # 'mse-minG-sm' # 'mse-tgt' #huber_loss, UBLB_loss, A2C, mse-tgt, scaled_mse-LB DEPRECATED
+q_signal = 'fitted-tgt-random-path' if not training else 'fitted-tgt-leaf'
 no_pruning = False
 restore_bidomains = True if load_model is None else False
 mcsplit_heuristic_on_iter_one = False
@@ -170,13 +181,13 @@ eps_testing = False
 encoder_type = 'abcd'
 embedder_type = 'abcd'
 interact_type = 'dvn'  # 'abcd4'
-n_dim = 64
+n_dim = 64 if not training else 16
 n_layers = 3
 GNN_mode = 'GAT'  # 'JSE_ATT' #TODO: if v4 is good -> turn into GAT?; TODO:
 learn_embs = True
 layer_AGG_w_MLP = True
 Q_mode = '8'  # ''ourQ;g1+g2_sg1+sg2_bd1+bd2;x1+x2'
-Q_act = 'elu+1'  # elu+1'  # 'elu+1'#'identity'
+Q_act = 'elu+1' if not training else 'elu' # elu+1'  # 'elu+1'#'identity'
 disentangle_search_tree = False
 
 animation_size = -1  # print out this many graphs per pair!
@@ -211,8 +222,9 @@ no_trivial_pairs = True
 parser.add_argument('--no_trivial_pairs', type=bool, default=no_trivial_pairs)
 no_bd_MLPs = False
 parser.add_argument('--no_bd_MLPs', type=bool, default=no_bd_MLPs)
-# priority_correction = False
-# parser.add_argument('--priority_correction', type=bool, default=priority_correction)
+if training:
+	priority_correction = False
+	parser.add_argument('--priority_correction', type=bool, default=priority_correction)
 smarter_bin_sampling = False
 parser.add_argument('--smarter_bin_sampling', type=bool, default=smarter_bin_sampling)
 subtract_sg_size = False
@@ -243,7 +255,7 @@ parser.add_argument('--run_bds_MLP_before_interact', type=bool,
 inverse_bd_size_order = False
 parser.add_argument('--inverse_bd_size_order', type=bool, default=inverse_bd_size_order)
 num_bds_max = 1
-num_nodes_degree_max = 3*num_bds_max if len(dataset_list) == 1 else 20*num_bds_max
+num_nodes_degree_max = 3*num_bds_max if len(dataset_list) == 1 and not training else 20*num_bds_max
 num_nodes_dqn_max = -1
 parser.add_argument('--num_bds_max', type=int, default=num_bds_max)
 parser.add_argument('--num_nodes_degree_max', type=int, default=num_nodes_degree_max)
@@ -259,13 +271,13 @@ supervised_before = 1250 if load_model is None else -1
 parser.add_argument('--supervised_before', type=int, default=supervised_before)
 imitation_before = 3750 if load_model is None else -1
 parser.add_argument('--imitation_before', type=int, default=imitation_before)
-recursion_threshold = 80 if load_model is None else (10000 if len(dataset_list) == 1 else 7500)
+recursion_threshold = 80 if load_model is None else (10000 if len(dataset_list) == 1 else 7500) if not training else -1
 parser.add_argument('--recursion_threshold', type=int, default=recursion_threshold)
-total_runtime = (360 if len(dataset_list) == 1 else -1)# if dvn_mode else 600
+total_runtime = (360 if len(dataset_list) == 1 else -1) if not training else -1 if load_model is None else 6000
 parser.add_argument('--total_runtime', type=int, default=total_runtime)
 long_running_val_mcsp = False
 parser.add_argument('--long_running_val_mcsp', type=bool, default=long_running_val_mcsp)
-promise_mode = 'P' if len(dataset_list) == 1 else 'P'
+promise_mode = 'P' if not training else 'diverse'
 parser.add_argument('--promise_mode', default=promise_mode)
 # Below are for NeuralMCS.
 binarize_q_true = False
@@ -439,7 +451,7 @@ parser.add_argument('--node_ordering', default=node_ordering)
 parser.add_argument('--no_probability', default=False)
 parser.add_argument('--positional_encoding', default=False)  # TODO: dataset.py cannot see this
 
-scalable = False if training else (True if len(dataset_list) == 1 else False)
+scalable = True if training else (True if len(dataset_list) == 1 else False)
 parser.add_argument('--scalable', type=bool, default=scalable)
 
 exclude_root = False

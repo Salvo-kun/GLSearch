@@ -1,4 +1,5 @@
 from collections import deque, Counter, defaultdict
+from data_structures_search_tree import unroll_bidomains
 import numpy as np
 from config import FLAGS
 
@@ -32,20 +33,25 @@ class ExperienceBuffer:
 # Bin Buffer has SAME INTERFACE as experience buffer but samples evenly by
 # hashing function i.e. nearest rounded down int of (q_max_UB + q_max_LB)/2
 class BinBuffer:
-    def __init__(self, capacity, sample_strat, biased=None):
+    def __init__(self, capacity, sample_strat, biased=None, scalable=False):
         self.bins = defaultdict(list)
         self.history = []
         self.sample_strat = sample_strat
         self.biased = biased
         self.replace = self.biased != 'full'
         self.capacity = capacity
+        self.scalable = scalable
 
     def __len__(self):
         return len(self.history)
 
     def filter(self, experiences):
-        good_experiences = [experience for experience in experiences
-                            if self.bin_hash(experience) >= 0]
+        if self.scalable:
+            good_experiences = [experience for experience in experiences
+                            if not self._is_trivial(experience)]
+        else:
+            good_experiences = [experience for experience in experiences
+                                if self.bin_hash(experience) >= 0]
         return good_experiences[-self.capacity:]
 
     def extend(self, experiences):
@@ -69,10 +75,17 @@ class BinBuffer:
         for experience in experiences:
             bin_key = self.bin_hash(experience)
             if FLAGS.no_trivial_pairs:
-                if experience.edge.state_next.v_search_tree == 0:
-                    continue  # TODO: make this code prettier in the future
+                if self.scalable:
+                    if self._is_trivial(experience):
+                        continue  # TODO: make this code prettier in the future
+                else:
+                    if experience.edge.state_next.v_search_tree == 0:
+                        continue  # TODO: make this code prettier in the future
             self.bins[bin_key].append(experience)
-            self.history.append(bin_key)
+            self.history.append (bin_key)
+
+    def _is_trivial(self, experience):
+        return len(unroll_bidomains(experience.edge.state_next.natts2bds)) == 0
 
     def sample(self, n_sample):
         experiences = []  # cumulative sample list

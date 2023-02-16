@@ -2,11 +2,11 @@ from batch import create_edge_index, create_adj_set
 from config import FLAGS
 from utils import OurTimer
 
-from data_structures_search_tree_scalable import Bidomain, StateNode, ActionEdge, SearchTree, \
-    ActionSpaceData, unroll_bidomains, get_natts_hash, get_natts2g2abd_sg_nids
-from data_structures_buffer_scalable import BinBuffer
-from data_structures_common_scalable import StackHeap, DoubleDict, DQNInput
-from layers_dqn_v1_scalable import Q_network_v1
+from data_structures_search_tree import Bidomain, StateNode, ActionEdge, SearchTree, \
+    ActionSpaceDataScalable, unroll_bidomains, get_natts_hash, get_natts2g2abd_sg_nids
+from data_structures_buffer import BinBuffer
+from data_structures_common import StackHeap, DoubleDict, DQNInput
+from layers_dqn_v1 import Q_network_v1
 from reward_calculator import RewardCalculator
 from saver import saver
 from embedding_saver import EMBEDDING_SAVER
@@ -122,11 +122,11 @@ class MCSRLBacktrack(nn.Module):
         self.seed = random.Random(123)
         self.global_iter_debugging = 20
         if FLAGS.smarter_bin_sampling:
-            self.buffer = BinBuffer(buffer_size, sample_strat='sg', biased='full')
+            self.buffer = BinBuffer(buffer_size, sample_strat='sg', biased='full', scalable=True)
         elif FLAGS.smart_bin_sampling:
-            self.buffer = BinBuffer(buffer_size, sample_strat='q_max', biased=None)
+            self.buffer = BinBuffer(buffer_size, sample_strat='q_max', biased=None, scalable=True)
         else:
-            self.buffer = BinBuffer(buffer_size, sample_strat=None, biased='biased')
+            self.buffer = BinBuffer(buffer_size, sample_strat=None, biased='biased', scalable=True)
         self.red_tickets = self.init_var(tot_num_train_pairs * self.perc_IL, float, is_positive, -1)
         self.is_dvn = 'dvn' in interact_type  # IMPORTANT TRICKY IMPLICATIONS TO LB LOSS_FUNCTION!
         self.reward_calculator = RewardCalculator(
@@ -134,10 +134,10 @@ class MCSRLBacktrack(nn.Module):
 
         self.dqn = Q_network_v1(encoder_type, embedder_type, interact_type, in_dim, n_dim,
                                 n_layers, GNN_mode, learn_embs, layer_AGG_w_MLP, Q_mode, Q_act,
-                                self.reward_calculator, self._environment)
+                                self.reward_calculator, self._environment, scalable=True)
         self.dqn_tgt = Q_network_v1(encoder_type, embedder_type, interact_type, in_dim, n_dim,
                                     n_layers, GNN_mode, learn_embs, layer_AGG_w_MLP, Q_mode,
-                                    Q_act, self.reward_calculator, self._environment)
+                                    Q_act, self.reward_calculator, self._environment, scalable=True)
 
         self.pca = None
 
@@ -257,7 +257,7 @@ class MCSRLBacktrack(nn.Module):
         # initializations
         search_stack = StackHeap()
         search_stack.add(state_init, 0)
-        search_tree = SearchTree(root=state_init)
+        search_tree = SearchTree(root=state_init, scalable=True)
         since_last_update_count = 0
 
         timer = OurTimer()
@@ -580,7 +580,7 @@ class MCSRLBacktrack(nn.Module):
 
         # put action space into a wrapper
         action_space_data = \
-            ActionSpaceData(
+            ActionSpaceDataScalable(
                 action_space,
                 natts2bds_pruned,
                 action_space_size_unexhausted_unpruned
@@ -655,7 +655,7 @@ class MCSRLBacktrack(nn.Module):
     def _get_empty_action_space_data(self, state):
         natts2bds_unexhausted = state.get_natts2bds_unexhausted(with_bids=True)
         action_space_data = \
-            ActionSpaceData(self._get_empty_action_space(), natts2bds_unexhausted, None)
+            ActionSpaceDataScalable(self._get_empty_action_space(), natts2bds_unexhausted, None)
         return action_space_data
 
     def _get_empty_action_space(self):

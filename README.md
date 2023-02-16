@@ -25,7 +25,7 @@ python3 main.py
 ```
 ### Training
 
-Replace `config.py` with `config_training.py`.
+Set `training = True` in `config.py`.
 
 Run the below command:
 ```

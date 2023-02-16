@@ -1,19 +1,61 @@
 from data_structures_common import DoubleDict
+from collections import defaultdict
 
 from copy import deepcopy
 import networkx as nx
+from config import FLAGS
 
 #########################################################################
 # Bidomain
 #########################################################################
 class Bidomain(object):
-    def __init__(self, left, right, is_adj):
+    def __init__(self, left, right, is_adj, natts, bid=None):
         self.left = left
         self.right = right
         self.is_adj = is_adj
+        self.natts = natts
+        self.bid = bid
 
     def __len__(self):
         return len(self.left) * len(self.right)
+
+def get_natts_hash(node):
+    if 'fuzzy_matching' in FLAGS.reward_calculator_mode:
+        natts = []
+    else:
+        natts = FLAGS.node_feats_for_mcs
+    natts_hash = tuple([node[natt] for natt in natts])
+    return natts_hash
+
+
+def unroll_bidomains(natts2bds):
+    bidomains = [bd for bds in natts2bds.values() for bd in bds]
+    return bidomains
+
+
+def get_natts2g2abd_sg_nids(natts2g2nids, natts2bds, nn_map):
+    natts2g2abd_sg_nids = defaultdict(dict)
+    sg1, sg2 = set(nn_map.keys()), set(nn_map.values())
+    for natts, g2nid in natts2g2nids.items():
+        left_cum, right_cum = set(), set()
+        if natts in natts2bds:
+            for bd in natts2bds[natts]:
+                left_cum.update(bd.left)
+                right_cum.update(bd.right)
+        left_cum.update(sg1.intersection(g2nid['g1']))  # TODO: potential bottleneck O(nn_map)
+        left_cum.update(sg2.intersection(g2nid['g2']))
+        natts2g2abd_sg_nids[natts]['g1'] = left_cum
+        natts2g2abd_sg_nids[natts]['g2'] = right_cum
+    return natts2g2abd_sg_nids
+
+
+def assign_bids(natts2bds):
+    # to ensure that given the same natts2bds, bid assignment is deterministic => sorted
+    bid = 0
+    for natts in sorted(natts2bds.keys()):
+        for bd in natts2bds[natts]:
+            bd.bid = bid
+            bid += 1
 
 #########################################################################
 # Action Space
@@ -31,16 +73,29 @@ class ActionSpaceData():
                 self.action_space = [[v],[w],[self.bdids[i]]]
                 return
         assert False
+        
+class ActionSpaceDataScalable():
+    def __init__(self, action_space, natts2bds_unexhausted, action_space_size_unexhausted_unpruned):
+        self.action_space = action_space
+        self.natts2bds_unexhausted = natts2bds_unexhausted
+        self.action_space_size_unexhausted_unpruned = action_space_size_unexhausted_unpruned
+
+    def filter_action_space_data(self, v, w):
+        for bds in self.natts2bds_unexhausted.values():
+            for bd in bds:
+                if v in bd.left and w in bd.right:
+                    self.action_space = [[v], [w], [bd.bid]]
 
 #########################################################################
 # State Nodes
 #########################################################################
 class StateNode(object):
-    def __init__(self, ins_g1, ins_g2, nn_map, bidomains, abidomains, ubidomains,
+    def __init__(self, ins_g1, ins_g2, nn_map, bidomains_or_nn_map_neighbors, 
+                 abidomains_or_natts2bds, ubidomains_or_natts2g2nids,
                  edge_index1, edge_index2, adj_list1, adj_list2, g1, g2,
                  degree_mat, sgw_mat, pca_mat, cur_id, mcsp_vec, MCS_size_UB,
                  explore_n_pairs=None, pruned_actions=None, exhausted_v=None,
-                 exhausted_w=None, tree_depth=0, num_steps=0, cum_reward=0):
+                 exhausted_w=None, tree_depth=0, num_steps=0, cum_reward=0, scalable = False):
         self.ins_g1 = ins_g1
         self.ins_g2 = ins_g2
         self.edge_index1 = edge_index1
@@ -55,11 +110,17 @@ class StateNode(object):
         self.x1 = None
         self.x2 = None
         self.nn_map = nn_map
-        self.bidomains = bidomains
-        self.abidomains = abidomains
-        self.ubidomains = ubidomains
+        if scalable:
+            self.nn_map_neighbors = bidomains_or_nn_map_neighbors
+            self.natts2bds = abidomains_or_natts2bds
+            self.natts2g2nids = ubidomains_or_natts2g2nids
+        else:
+            self.bidomains = bidomains_or_nn_map_neighbors
+            self.abidomains = abidomains_or_natts2bds
+            self.ubidomains = ubidomains_or_natts2g2nids
         self.q_vec = None
         self.recompute = False
+        self.scalable = scalable
 
         # for additional pruning
         self.pruned_actions = DoubleDict() if pruned_actions is None else pruned_actions
@@ -100,7 +161,6 @@ class StateNode(object):
             cum_reward += (discount ** i) * reward
         return cum_reward
 
-
     def disentangle_paths(self):
         if len(self.action_next_list) == 0:
             state_cur_list = [deepcopy(self)]
@@ -133,7 +193,64 @@ class StateNode(object):
                     action_next.reward + discount * v_max_next_state
                 state.v_search_tree = max(state.v_search_tree, q_max_cur_state)
 
-        return
+    def prune_action(self, v, w):  # , remove_nodes):
+        self.pruned_actions.add_lr(v, w)
+        # if remove_nodes:
+        for bd in unroll_bidomains(self.natts2bds):
+            if v in bd.left:
+                assert w in bd.right
+                if len(bd.right - self.pruned_actions.l2r[v]) == 0:
+                    self.exhausted_v.add(v)
+                    self.recompute = True
+                if len(bd.left - self.pruned_actions.r2l[w]) == 0:
+                    self.exhausted_w.add(w)
+                    self.recompute = True
+
+        for g2nids in self.natts2g2nids.values():
+            if len(g2nids['g2'] - self.pruned_actions.l2r[v]) == 0:
+                self.exhausted_v.add(v)
+                self.recompute = True
+            if len(g2nids['g1'] - self.pruned_actions.r2l[w]) == 0:
+                self.exhausted_w.add(w)
+                self.recompute = True
+
+    def get_natts2bds_ubd_unexhausted(self):
+        natts2bds_unexhausted = defaultdict(list)
+        for natts, g2nids in self.natts2g2nids.items():
+            left = g2nids['g1'] - self.exhausted_v
+            right = g2nids['g2'] - self.exhausted_w
+            if len(left) > 0 and len(right) > 0:
+                natts2bds_unexhausted[natts].append(
+                    Bidomain(left, right, natts)
+                )
+        return natts2bds_unexhausted
+
+    def get_natts2bds_abd_unexhausted(self):
+        natts2bds_unexhausted = defaultdict(list)
+        for natts, bds in self.natts2bds.items():
+            for bd in bds:
+                assert bd.natts == natts
+                if len(bd.left.intersection(self.exhausted_v)) > 0 or \
+                        len(bd.right.intersection(self.exhausted_w)) > 0:
+                    left = bd.left - self.exhausted_v
+                    right = bd.right - self.exhausted_w
+                    if len(left) > 0 and len(right) > 0:
+                        natts2bds_unexhausted[natts].append(
+                            Bidomain(left, right, natts)
+                        )
+                else:
+                    assert len(bd.left) > 0 and len(bd.right) > 0
+                    natts2bds_unexhausted[natts].append(bd)
+        return natts2bds_unexhausted
+
+    def get_natts2bds_unexhausted(self, with_bids=True):
+        if len(self.nn_map) == 0:
+            natts2bds_unexhausted = self.get_natts2bds_ubd_unexhausted()
+        else:
+            natts2bds_unexhausted = self.get_natts2bds_abd_unexhausted()
+        if with_bids:
+            assign_bids(natts2bds_unexhausted)
+        return natts2bds_unexhausted
 
     def get_bd_idx(self, pruned_bidomains, v, w):
         for bd_idx, bidomain in enumerate(pruned_bidomains):
@@ -264,8 +381,9 @@ class ActionEdge(object):
 # Search Tree
 #########################################################################
 class SearchTree(object):
-    def __init__(self, root):
+    def __init__(self, root, scalable=False):
         self.root = root
+        self.scalable = scalable
         self.nodes = {root}
         self.edges = set()
         self.nxgraph = nx.Graph()
@@ -309,7 +427,7 @@ class SearchTree(object):
         eid = (cur_state.nid, self.cur_nid)
         self.assign_val_to_edge(eid, 'q_pred', q_pred.item())
 
-        #accumulate the reward
+        # accumulate the reward
         next_state.cum_reward = \
             self.get_next_cum_reward(cur_state, action_edge, discount)
         self.cur_nid += 1
@@ -323,14 +441,15 @@ class SearchTree(object):
         search_tree_list = []
         root_list = self.root.disentangle_paths()
         for root in root_list:
-            search_tree_list.append(SearchTree(root))
+            search_tree_list.append(SearchTree(root, self.scalable))
         return search_tree_list
 
-    def assign_v_search_tree(self, discount):#, g1, g2):
+    def assign_v_search_tree(self, discount):
         self.root.assign_v(discount)
-        for node in self.nodes:
-            self.assign_val_to_node(node.nid, 'v_search_tree', node.v_search_tree)
-
+        if not self.scalable:
+            for node in self.nodes:
+                self.assign_val_to_node(node.nid, 'v_search_tree', node.v_search_tree)
+             
     def associate_q_pred_true_with_node(self):
         for edge in self.edges:
             nid = edge.state_next.nid

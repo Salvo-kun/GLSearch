@@ -6,6 +6,7 @@ import torch
 from config import FLAGS
 from layers_gnn_propagator import GNNPropagator
 from layers_util import MLP, create_act
+from data_structures_search_tree import unroll_bidomains, get_natts2g2abd_sg_nids
 import math
 import torch.nn.functional as F
 from collections import defaultdict
@@ -13,7 +14,7 @@ from collections import defaultdict
 
 class DVN(nn.Module):
     def __init__(self, n_dim, n_layers, learn_embs, layer_AGG_w_MLP, Q_mode, Q_act,
-                 reward_calculator, environment):
+                 reward_calculator, environment, scalable=False):
         super(DVN, self).__init__()
         self.gnn_main = GNNPropagator(
             [n_dim for _ in range(n_layers + 1)],
@@ -111,6 +112,7 @@ class DVN(nn.Module):
 
         # TODO: rm me!
         self.timer = OurTimer()
+        self.scalable = scalable
 
     def _create_default_emb(self, dim_interact_out):
         if FLAGS.default_emb == 'learnable':
@@ -435,18 +437,56 @@ class DVN(nn.Module):
         emb_list = []
         x1_in, x2_in = embs
         for emb_mode in self.emb_mode_list_bd:
-            if emb_mode == 'abds':
-                bidomains = state.abidomains
-                emb = self._get_bds(x1_in, x2_in, bidomains, emb_mode, state, gs, q_vec_idx, timer)
-            elif emb_mode == 'ubds':
-                bidomains = state.ubidomains
-                emb = self._get_bds(x1_in, x2_in, bidomains, emb_mode, state, gs, q_vec_idx, timer)
-            elif emb_mode == 'bbds':
-                bidomains = state.bidomains
-                emb = self._get_bds(x1_in, x2_in, bidomains, emb_mode, state, gs, q_vec_idx, timer)
+            if self.scalable:
+                if emb_mode == 'abds':
+                    bds1_list_raw, bds2_list_raw = [], []
+                    for bidomain in unroll_bidomains(state.natts2bds):
+                        # abd(label = i) = sum(x[abd_j(label = i)])
+                        bds1_list_raw.append(torch.sum(x1_in[list(bidomain.left)], dim=0))
+                        bds2_list_raw.append(torch.sum(x2_in[list(bidomain.right)], dim=0))
+                elif emb_mode == 'ubds':
+                    natts2g2abd_sg_nids = \
+                        get_natts2g2abd_sg_nids(
+                            state.natts2g2nids, state.natts2bds, state.nn_map)
+                    bds1_list_raw, bds2_list_raw = [], []
+                    for natts, g2nids in state.natts2g2nids.items():
+                        # ubd(label = i) = sum(x[g(label = i) - (sum_j abd_j(label = i) + sg(label=i))])
+                        if natts in natts2g2abd_sg_nids:
+                            g2abd_sg_nids = natts2g2abd_sg_nids[natts]
+                            indices_1 = list(set(g2nids['g1']) - set(g2abd_sg_nids['g1']))
+                            indices_2 = list(set(g2nids['g2']) - set(g2abd_sg_nids['g2']))
+                        else:
+                            indices_1 = list(g2nids['g1'])
+                            indices_2 = list(g2nids['g2'])
+                        bds1_raw = torch.sum(x1_in[indices_1], dim=0)
+                        bds2_raw = torch.sum(x2_in[indices_2], dim=0)
+    
+                        bds1_list_raw.append(bds1_raw)
+                        bds2_list_raw.append(bds2_raw)
+                else:
+                    assert False
+    
+                emb = \
+                    self._get_bds_scalable(
+                        bds1_list_raw, bds2_list_raw,
+                        emb_mode,
+                        state, gs, q_vec_idx,
+                        timer
+                    )
+                emb_list.append(emb.view(1, -1))
             else:
-                assert False
-            emb_list.append(emb.view(1, -1))
+                if emb_mode == 'abds':
+                    bidomains = state.abidomains
+                    emb = self._get_bds(x1_in, x2_in, bidomains, emb_mode, state, gs, q_vec_idx, timer)
+                elif emb_mode == 'ubds':
+                    bidomains = state.ubidomains
+                    emb = self._get_bds(x1_in, x2_in, bidomains, emb_mode, state, gs, q_vec_idx, timer)
+                elif emb_mode == 'bbds':
+                    bidomains = state.bidomains
+                    emb = self._get_bds(x1_in, x2_in, bidomains, emb_mode, state, gs, q_vec_idx, timer)
+                else:
+                    assert False
+                emb_list.append(emb.view(1, -1))
 
         bds = torch.cat(tuple(emb_list), dim=1)
         return bds
@@ -471,8 +511,73 @@ class DVN(nn.Module):
         return bd_embs_collate
 
     def state_is_leaf_node(self, state):
-        return len(state.bidomains) == 0
+        return len(unroll_bidomains(state.natts2bds)) == 0 if self.scalable else len(state.bidomains) == 0
+    
+    def _get_bds_scalable(self, bds1_list_raw, bds2_list_raw, mode, state, gs, q_vec_idx, timer):
+        if mode == 'abds':
+            default_vec = self.abds_default
+        elif mode == 'ubds':
+            default_vec = self.ubds_default
+        else:
+            assert False
 
+        assert len(bds1_list_raw) == len(bds2_list_raw)
+        if len(bds1_list_raw) > 0:
+            # bds1_list_raw, bds2_list_raw = [], []
+            bds1_list_raw = torch.stack(tuple(bds1_list_raw), dim=0)
+            bds2_list_raw = torch.stack(tuple(bds2_list_raw), dim=0)
+
+            if FLAGS.no_bd_MLPs:
+                # TODO: I put this here so that i can load models with MLP_abd_..., put this init in future
+                bds1_list = bds1_list_raw
+                bds2_list = bds2_list_raw
+            elif mode == 'abds':
+                bds1_list = self.MLP_abd_big(bds1_list_raw)
+                bds2_list = self.MLP_abd_big(bds2_list_raw)
+            elif mode == 'ubds':
+                bds1_list = self.MLP_ubd_big(bds1_list_raw)
+                bds2_list = self.MLP_ubd_big(bds2_list_raw)
+            elif mode == 'bbds':
+                bds1_list = self.MLP_bbd_big(bds1_list_raw)
+                bds2_list = self.MLP_bbd_big(bds2_list_raw)
+            else:
+                assert False
+
+            bds_list = self._tunable_interact(
+                F.normalize(bds1_list, dim=1, p=2),
+                F.normalize(bds2_list, dim=1, p=2),
+                mode
+            )  # num_bds by D
+
+            if FLAGS.attention_bds:
+                # assert gs.shape[0] == 1
+                att = torch.matmul(bds_list, gs.t())
+                att = F.softmax(att, 0)
+                bds_list = bds_list * att
+
+            # else:
+            if FLAGS.no_bd_MLPs:
+                # TODO: I put this here so that i can load models with MLP_abd_..., put this init in future
+                print('@@@@@@@@@@@@@@@@@@@@@')
+                bds = torch.sum(bds_list, dim=0).view(1, -1)
+            elif mode == 'abds':
+                bds = self.MLP_abds_big(torch.sum(bds_list, dim=0)).view(1, -1)
+            elif mode == 'ubds':
+                bds = self.MLP_ubds_big(torch.sum(bds_list, dim=0)).view(1, -1)
+            elif mode == 'bbds':
+                bds = self.MLP_bbds_big(torch.sum(bds_list, dim=0)).view(1, -1)
+            else:
+                assert False
+
+            if FLAGS.normalize_emb:
+                bds = F.normalize(bds, dim=1, p=2)
+
+            bds_out = default_vec + bds
+        else:
+            bds_out = default_vec
+
+        return bds_out
+    
     def _get_bds(self, x1, x2, all_bidomains, mode, state, gs, q_vec_idx, timer):
         if mode == 'abds':
             default_vec = self.abds_default
@@ -510,8 +615,6 @@ class DVN(nn.Module):
                 bds2_list = self.MLP_bbd_big(bds2_list_raw)
             else:
                 assert False
-            # if FLAGS.time_analysis:
-            #     timer.time_and_clear(f'{q_vec_idx} _bdagg MLP_bd_big')
 
             bds_list = self._tunable_interact(
                 F.normalize(bds1_list, dim=1, p=2),

@@ -6,6 +6,11 @@ import torch
 # Search Stack
 #########################################################################
 '''
+Implicit trade-off:
+store more dead nodes in priority Q -> faster get and put times amortized O(1)
+remove dead nodes in priority Q as they are found -> O(logN) get and put times
+NOTE: if a lot more stack pops than heap pops -> may need GC (?)
+
 Modified from python documentation for PriorityQ implementation:
 https://docs.python.org/3/library/heapq.html
 '''
@@ -69,6 +74,11 @@ class StackHeap:
         elif method == 'stack':
             priority, count, task = self.sk[-1]
             self.remove_task(task, delete=False)
+        elif method == 'queue':
+            priority, count, task = self.sk[0]
+            to_print = [s[2].tree_depth for s in self.sk]
+            print('to_print', to_print)
+            self.remove_task(task, delete=False)
         else:
             assert False
 
@@ -107,7 +117,7 @@ class DoubleDict():
 
 
 class DQNInput:
-    def __init__(self, state, action_space_data, restore_bidomains):#, TIMER=None, recursion_count=None):
+    def __init__(self, state, action_space_data, restore_bidomains, scalable = False):#, TIMER=None, recursion_count=None):
         self.restore_bidomains = restore_bidomains
         self.pair_id = (state.g1.graph['gid'], state.g2.graph['gid'])
         self.exhausted_v = state.exhausted_v
@@ -118,11 +128,13 @@ class DQNInput:
             state.edge_index2, state.adj_list2, state.exhausted_w)#, TIMER, recursion_count, '2')
         self.action_space_data = action_space_data
         self.state = state
-
+        self.scalable = scalable
+        
+        if not self.scalable:
         # TODO: assert action_space_data
-        for v,w in zip(action_space_data.action_space[0], action_space_data.action_space[1]):
-            action_space_data = self._get_empty_action_space_data(state)
-            action_space_data.filter_action_space_data(v, w)
+            for v,w in zip(action_space_data.action_space[0], action_space_data.action_space[1]):
+                action_space_data = self._get_empty_action_space_data(state)
+                action_space_data.filter_action_space_data(v, w)
     def _get_empty_action_space_data(self, state):
         from data_structures_search_tree import ActionSpaceData
         bds_unexhausted, bds_adjacent, bdids_adjacent = \

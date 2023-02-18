@@ -307,7 +307,7 @@ def load_single_train_test_data(dataset_name, align_metric, node_ordering):
         if FLAGS.dataset_version != None:
             tp += '_{}'.format(FLAGS.dataset_version)
     tp += '_{}'.format(FLAGS.node_feats)
-    rtn = load(tp)
+    rtn = load(tp.replace('::','_').replace(';','_'))
     if rtn is not None:
         if len(rtn) == 0:
             raise ValueError('Weird empty loaded dict')

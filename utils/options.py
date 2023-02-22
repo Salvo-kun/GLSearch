@@ -27,6 +27,14 @@ def get_option_value(options, option, throw_on_miss=True):
         if throw_on_miss: raise KeyError(f'Option {option} missing inside {dict_options}')
         
     return value
+
+def parse_bool(s: str):
+    if s == 'True':
+        return True
+    elif s == 'False':
+        return False
+    else:
+        raise RuntimeError('Unknown bool string {}'.format(s))
     
 
 if __name__ == '__main__':

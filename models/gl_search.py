@@ -1,12 +1,17 @@
 from models.base_model import BaseModel
 from torch.nn import ModuleList
-from models.layers.mcs_rl_backtrack import MCSplitRLBacktrack
-from utils.utils_options import extract_layer_info, get_option_value
+from models.mcs_rl_backtrack import MCSplitRLBacktrack
+from models.mcs_rl_backtrack_scalable import MCSplitRLBacktrackScalable
+from utils.options import extract_layer_info, get_option_value, parse_bool
 import time
 
 class GLSearch(BaseModel):
-    def __init__(self, opt):
+    def __init__(self, opt, num_node_feat, feat_map, tot_num_train_pairs):
         super(GLSearch, self).__init__(opt)
+        self.scalable = parse_bool(get_option_value(self.opt, 'scalable'))
+        self.num_node_feat = num_node_feat
+        self.feat_map = feat_map
+        self.tot_num_train_pairs = tot_num_train_pairs
         self._init_layers()
 
     def forward(self, cur_id, iter, batch_data): # TODO: rewrite this in the classic way (just x passed)
@@ -35,6 +40,10 @@ class GLSearch(BaseModel):
             
             assert(layer_name == 'MCSRL_backtrack') # only one supported, TODO move check in the option parser
             
-            layers.append(MCSplitRLBacktrack(self.opt, **layer_info))
+            layer_info['num_node_feat'] = self.num_node_feat
+            layer_info['feat_map'] = self.feat_map
+            layer_info['tot_num_train_pairs'] = self.tot_num_train_pairs
+            
+            layers.append(MCSplitRLBacktrackScalable(self.opt, **layer_info) if self.scalable else MCSplitRLBacktrack(self.opt, **layer_info))
             
         self.layers = layers

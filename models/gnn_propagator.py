@@ -2,21 +2,21 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.nn import GCNConv, GINConv, GATConv
-from models.gat_conv_manual import GATConvManual
 
 #########################################################################
 # GNN Method
 #########################################################################
 class GNNPropagator(nn.Module):
-    def __init__(self, dims, out_dim, gnn_type, learn_embs, layer_AGG_w_MLP):
+    def __init__(self, dims, out_dim, gnn_type, learn_embs, layer_AGG_w_MLP, device):
         super(GNNPropagator, self).__init__()
         self.n_layers = len(dims) - 1
         self.GNNs = []
         self.SGMNs = []
         self.MLPs = []
         self.gnn_opts = gnn_type.split('-')
-        self.w = nn.Parameter(torch.Tensor(*(1, self.n_layers)).to(FLAGS.device), requires_grad=True)
+        self.w = nn.Parameter(torch.Tensor(*(1, self.n_layers)).to(device), requires_grad=True)
         nn.init.xavier_normal_(self.w)
+        
         for i in range(self.n_layers):
             if 'GCN' in self.gnn_opts:
                 self.GNNs.append(GCNConv(dims[i], dims[i + 1]))
@@ -24,38 +24,28 @@ class GNNPropagator(nn.Module):
                 self.GNNs.append(GINConv(dims[i], dims[i + 1]))
             elif 'GAT' in self.gnn_opts:
                 self.GNNs.append(GATConv(dims[i], dims[i + 1]))
-            elif 'GATMan' in self.gnn_opts:
-                self.GNNs.append(GATConvManual(dims[i], dims[i + 1]))
             else:
                 assert False
             self.MLPs.append(nn.Linear(dims[i + 1], out_dim))
-        self.GNNs = nn.ModuleList(self.GNNs).to(FLAGS.device)
-        self.MLPs = nn.ModuleList(self.MLPs).to(FLAGS.device)
+            
+        self.GNNs = nn.ModuleList(self.GNNs).to(device)
+        self.MLPs = nn.ModuleList(self.MLPs).to(device)
         self.act = nn.ReLU()
 
         if learn_embs:
-            self.G = torch.nn.Parameter(
-                        torch.randn((1, dims[1]), device=FLAGS.device),
-                        requires_grad=True
-                    )
-            self.S = torch.nn.Parameter(
-                        torch.randn((1, dims[1]), device=FLAGS.device),
-                        requires_grad=True
-                    )
-            self.BD = torch.nn.Parameter(
-                        torch.randn((1, dims[1]), device=FLAGS.device),
-                        requires_grad=True
-                    )
+            self.G = torch.nn.Parameter(torch.randn((1, dims[1]), device=device), requires_grad=True)
+            self.S = torch.nn.Parameter(torch.randn((1, dims[1]), device=device), requires_grad=True)
+            self.BD = torch.nn.Parameter(torch.randn((1, dims[1]), device=device), requires_grad=True)
         else:
-            self.G = torch.zeros((1, dims[1]), device=FLAGS.device)
-            self.S = torch.zeros((1, dims[1]), device=FLAGS.device)
-            self.BD = torch.zeros((1, dims[1]), device=FLAGS.device)
+            self.G = torch.zeros((1, dims[1]), device=device)
+            self.S = torch.zeros((1, dims[1]), device=device)
+            self.BD = torch.zeros((1, dims[1]), device=device)
 
         self.layer_AGG_w_MLP = layer_AGG_w_MLP
 
-    def __call__(self, X1, X2, edge_index1, edge_index2, nn_map=None, action_space_data=None, alpha1=None, alpha2=None):
+    def __call__(self, X1, X2, edge_index1, edge_index2, nn_map=None, action_space_data=None):
         gnn_type = self.gnn_opts[0] # old code
-        bypass_GSBD = gnn_type in ['GAT', 'GATMan', 'GCN']
+        bypass_GSBD = gnn_type in ['GAT', 'GCN']
         if not bypass_GSBD:
             n_bisets = 0 if action_space_data is None else len(action_space_data.pruned_bds)
             G = self.G.repeat(2, 1)

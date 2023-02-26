@@ -7,17 +7,15 @@ from utils.validation import validate, IS_POSITIVE, IS_BETWEEN_0_AND_1
 from copy import deepcopy
 import numpy as np
 import torch
-from batch import create_edge_index, create_adj_set
+from utils.graph import create_edge_index, create_adj_set
 from utils.timer import OurTimer
 from utils.data_structures.search_tree import Bidomain, StateNode, ActionEdge, SearchTree, ActionSpaceData
 from utils.data_structures.buffer import BinBuffer
-from utils.data_structures.common import StackHeap, DoubleDict, DQNInput
+from utils.data_structures.common import StackHeap, DoubleDict
+from utils.data_structures.dqn_input import DQNInput
 from models.dqn import Q_network_v1
-from models.pca import PCAModel
-from models.sgw import sgw
 from utils.reward_calculator import RewardCalculator
-from saver import saver
-from embedding_saver import EMBEDDING_SAVER
+from utils.saver import saver
 
 class McspVec():
     def __init__(self, ldeg, rdeg):
@@ -98,7 +96,6 @@ class MCSplitRLBacktrack(BaseModel):
         self.is_dvn = 'dvn' in self.interact_type  # IMPORTANT TRICKY IMPLICATIONS TO LB LOSS_FUNCTION!
         self.red_tickets = validate(self.tot_num_train_pairs * self.perc_IL, float, IS_POSITIVE, -1)
         self.Q_eps_dec_each_iter, self.Q_eps_start, self.Q_eps_end = tuple(validate(float(x), float, IS_BETWEEN_0_AND_1) for x in self.Q_sampling.split('_')[1:])
-        self.pca = PCAModel([self.in_dim] + [self.n_dim ] * 3) if self.DQN_mode == 'pca' else None
         self.loss = MSELoss() if self.global_loss_func == 'MSE' else BCEWithLogitsLoss()   
         self.animation_size = None          
         self.debug_first_train_iters = 50
@@ -108,7 +105,7 @@ class MCSplitRLBacktrack(BaseModel):
         self.train_counter = -1
         self.curriculum_info = defaultdict(dict)  
         self.sample_strat, self.biased = ('sg', 'full') if get_option_value(self.opt, 'smarter_bin_sampling') else (('q_max', None) if get_option_value(self.opt, 'smart_bin_sampling') else (None, 'biased'))
-        self.buffer = BinBuffer(self.buffer_size, sample_strat=self.sample_strat, biased=self.biased, no_trival_pairs=get_option_value(self.opt, 'no_trival_pairs'))
+        self.buffer = BinBuffer(self.buffer_size, sample_strat=self.sample_strat, biased=self.biased, no_trivial_pairs=get_option_value(self.opt, 'no_trivial_pairs'))
         self.reward_calculator = RewardCalculator(get_option_value(self.opt, 'reward_calculator_mode'), self.feat_map, self.calc_bound)
         self.dqn, self.dqn_tgt = [Q_network_v1(self.encoder_type, self.embedder_type, self.interact_type, self.in_dim, self.n_dim, self.n_layers, self.GNN_mode, self.learn_embs, self.layer_AGG_w_MLP, self.Q_mode, self.Q_act, self.reward_calculator, self._environment)] * 2        
         self.forward_config_dict = self.get_forward_config_dict(self.restore_bidomains, self.total_runtime, self.recursion_threshold, self.q_signal)
@@ -128,7 +125,7 @@ class MCSplitRLBacktrack(BaseModel):
         forward_mode = self.get_forward_mode(iter)
         self.apply_forward_config(self.forward_config_dict[forward_mode])            
             
-        methods = get_option_value(self.opt, 'val_method_list') if forward_mode == TEST_MODE else (['dqn'] forward_mode == TRAIN_MODE else ['mcspv2'])
+        methods = get_option_value(self.opt, 'val_method_list') if forward_mode == TEST_MODE else (['dqn'] if forward_mode == TRAIN_MODE else ['mcspv2'])
         for method in methods:
             # run forward model
             self.apply_method_config(self.method_config_dict[method])
@@ -268,8 +265,8 @@ class MCSplitRLBacktrack(BaseModel):
         self.search_path = None
         self.no_pruning = None
 
-        total_runtime_test = self.init_var(get_option_value(self.opt, 'total_runtime'), int, is_positive, None)
-        recursion_threshold_test = self.init_var(get_option_value(self.opt, 'recursion_threshold'), int, is_positive, None)
+        total_runtime_test = validate(get_option_value(self.opt, 'total_runtime'), int, IS_POSITIVE, None)
+        recursion_threshold_test = validate(get_option_value(self.opt, 'recursion_threshold'), int, IS_POSITIVE, None)
 
         forward_config_dict = {
             PRETRAIN_MODE:
@@ -478,7 +475,7 @@ class MCSplitRLBacktrack(BaseModel):
             # set up general input data
             g1, g2 = pair.g1.get_nxgraph(), pair.g2.get_nxgraph()
             ins_g1, ins_g2, offset = self.compute_ins(g1, g2, ins, offset)
-            edge_index1, edge_index2 = create_edge_index(g1), create_edge_index(g2)
+            edge_index1, edge_index2 = create_edge_index(g1, get_option_value(self.opt, 'device')), create_edge_index(g2, get_option_value(self.opt, 'device'))
             adj_list1, adj_list2 = create_adj_set(g1), create_adj_set(g2)
             nn_map = {}
             bidomains, abidomains, ubidomains = self._update_bidomains(g1, g2, nn_map, None, None)
@@ -488,10 +485,6 @@ class MCSplitRLBacktrack(BaseModel):
             degree_mat, mcsp_vec, sgw_mat, pca_mat = None, None, None, None
             if self.DQN_mode in ['fixedv_mcsp', 'fixedv_mcsprl'] or get_option_value(self.opt, 'use_mcsp_policy'):
                 mcsp_vec = self.get_mcsp_vec(g1, g2)
-            if self.DQN_mode == 'sgw':
-                sgw_mat = sgw(g1, g2)
-            if self.DQN_mode == 'pca':
-                pca_mat = self.pca(pair, ins_g1, ins_g2)
 
             # create input data object
             torch.set_printoptions(profile="full")
@@ -584,7 +577,6 @@ class MCSplitRLBacktrack(BaseModel):
         return empty_action_space or ((not self.no_pruning) and bnb_condition)
 
     def post_process(self, search_tree, incumbent_list):
-        EMBEDDING_SAVER.clear()
         if self.training:
             search_tree.assign_v_search_tree(self.reward_calculator.discount)
             if get_option_value(self.opt, 'val_debug'):
@@ -640,23 +632,11 @@ class MCSplitRLBacktrack(BaseModel):
         return q_vec
 
     def _Q_network(self, state, action_space_data, tgt_network=False, detach_in_chunking_stage=False):
-        # unpack inputs
-        if self.DQN_mode == 'pca':
-            q_vec = state.pca_mat[action_space_data.action_space[:2]].view(-1, 1)
-        elif self.DQN_mode == 'sgw':
-            q_vec = torch.tensor(state.sgw_mat[action_space_data.action_space[:2]]).view(-1, 1)
-        elif self.DQN_mode == 'rand':
-            q_vec = state.degree_mat[action_space_data.action_space[:2]].view(-1, 1)
-            q_vec = torch.rand_like(q_vec)
-        elif 'fixedv' in self.DQN_mode:
-            mode = self.DQN_mode.split('_')[-1]
-            q_vec = self.fixed_v(action_space_data, state, mode)
+        dqn_input = DQNInput(state, action_space_data, self.restore_bidomains)
+        if tgt_network:
+            q_vec = self.dqn_tgt(dqn_input, detach_in_chunking_stage)
         else:
-            dqn_input = DQNInput(state, action_space_data, self.restore_bidomains)
-            if tgt_network:
-                q_vec = self.dqn_tgt(dqn_input, detach_in_chunking_stage)
-            else:
-                q_vec = self.dqn(dqn_input, detach_in_chunking_stage)
+            q_vec = self.dqn(dqn_input, detach_in_chunking_stage)
         return q_vec
 
     def fixed_v(self, action_space_data, state, mode):
@@ -976,7 +956,6 @@ class MCSplitRLBacktrack(BaseModel):
         next_state.pruned_actions, next_state.exhausted_v, next_state.exhausted_w = DoubleDict(), set(), set()
 
     def _get_pred_and_true_q(self, buffer_entry):
-        EMBEDDING_SAVER.clear()
         g1, g2 = buffer_entry.g1, buffer_entry.g2
         edge = buffer_entry.edge
         state = edge.state_prev
@@ -989,13 +968,11 @@ class MCSplitRLBacktrack(BaseModel):
         action_space_data.filter_action_space_data(v,w)
 
         q_pred = torch.squeeze(self._Q_network(state, action_space_data, tgt_network=False))
-        EMBEDDING_SAVER.clear()
 
         # compute q true
         reward = torch.tensor(self.reward_calculator.compute_reward_batch(action_space_data.action_space, g1, g2, state, next_state), device=get_option_value(self.opt, 'device')).type(torch.cuda.FloatTensor)
         q_next = self._get_q_next(next_state, next_action_space_data)
         q_true = (reward + self.reward_calculator.discount * q_next).detach()
-        EMBEDDING_SAVER.clear()
 
         return q_pred, q_true, state
 

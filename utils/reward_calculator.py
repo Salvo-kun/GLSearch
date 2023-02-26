@@ -86,12 +86,8 @@ class RewardCalculator():
         sg2_state = list(state.nn_map.values())
         sg1_next_state = list(next_state.nn_map.keys())
         sg2_next_state = list(next_state.nn_map.values())
-        num_edges_state = \
-            g1.subgraph(sg1_state).number_of_edges() + \
-            g2.subgraph(sg2_state).number_of_edges()
-        num_edges_next_state = \
-            g1.subgraph(sg1_next_state).number_of_edges() + \
-            g2.subgraph(sg2_next_state).number_of_edges()
+        num_edges_state = g1.subgraph(sg1_state).number_of_edges() + g2.subgraph(sg2_state).number_of_edges()
+        num_edges_next_state = g1.subgraph(sg1_next_state).number_of_edges() + g2.subgraph(sg2_next_state).number_of_edges()
         delta_edges = (num_edges_next_state - num_edges_state)/2
         return delta_edges
 
@@ -117,8 +113,7 @@ class RewardCalculator():
             for i in range(num_features - 1, -1, -1):
                 reward_matrix.append(reward_vec[i:i + num_features])
             reward_matrix = np.stack(tuple(reward_matrix))
-            reward_matrix = (reward_matrix + np.transpose(reward_matrix)) / (
-                        2 * np.max(reward_matrix))
+            reward_matrix = (reward_matrix + np.transpose(reward_matrix)) / (2 * np.max(reward_matrix))
         else:
             assert False
         return reward_matrix

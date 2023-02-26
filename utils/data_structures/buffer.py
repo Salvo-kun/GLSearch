@@ -30,7 +30,7 @@ class ExperienceBuffer:
 # Bin Buffer has SAME INTERFACE as experience buffer but samples evenly by
 # hashing function i.e. nearest rounded down int of (q_max_UB + q_max_LB)/2
 class BinBuffer:
-    def __init__(self, capacity, sample_strat, biased=None, scalable=False, no_trival_pairs=False):
+    def __init__(self, capacity, sample_strat, biased=None, scalable=False, no_trivial_pairs=False):
         self.bins = defaultdict(list)
         self.history = []
         self.sample_strat = sample_strat
@@ -38,7 +38,7 @@ class BinBuffer:
         self.replace = self.biased != 'full'
         self.capacity = capacity
         self.scalable = scalable
-        self.no_trival_pairs = no_trival_pairs
+        self.no_trivial_pairs = no_trivial_pairs
 
     def __len__(self):
         return len(self.history)

@@ -19,7 +19,7 @@ def extract_layer_info(layer_options):
 
 def get_option_value(options, option, throw_on_miss=True):
     value = None
-    dict_options = deepcopy(options) if isinstance(options, dict) else vars(options)
+    dict_options = vars(options)
     
     try:
         value = dict_options[option]

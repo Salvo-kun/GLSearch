@@ -40,7 +40,7 @@ class GLSearch(BaseModel):
             
             assert(layer_name == 'MCSRL_backtrack') # only one supported, TODO move check in the option parser
             
-            layer_info['num_node_feat'] = self.num_node_feat
+            layer_info['in_dim'] = self.num_node_feat
             layer_info['feat_map'] = self.feat_map
             layer_info['tot_num_train_pairs'] = self.tot_num_train_pairs
             

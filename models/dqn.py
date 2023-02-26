@@ -1,9 +1,9 @@
 import torch.nn as nn
 import torch
 
-from utils.data_structures.common import DQNInput
+from utils.data_structures.dqn_input import DQNInput
 from utils.data_structures.search_tree import ActionSpaceData, ActionSpaceDataScalable
-from config import FLAGS
+from options import opt
 from models.dvn import DVN
 
 class Q_network_v1(nn.Module):
@@ -46,7 +46,7 @@ class Q_network_v1(nn.Module):
 
     def _chunked_interact(self, x1_in, x2_in, dqn_input, detach_in_chunking_stage, fun):
         # ex. 'Xproduct-x1_x2-sg1_sg2_g1_g2'
-        max_chunk_size = FLAGS.max_chunk_size  # 128
+        max_chunk_size = opt.max_chunk_size  # 128
         num_actions = len(dqn_input.action_space_data.action_space[0])
         # print(f'in dvn wrapper: {num_actions}')
         if num_actions > max_chunk_size:

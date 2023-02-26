@@ -1,5 +1,4 @@
 import argparse
-import os
 
 class BaseOptions():
     def __init__(self):
@@ -7,7 +6,7 @@ class BaseOptions():
         self.initialized = False
 
     def initialize(self):
-        self.parser.add_argument('--base', required=True, type=str, help='base parameter')
+        # self.parser.add_argument('--base', required=True, type=str, help='base parameter')
         self.initialized = True
 
     def parse(self):

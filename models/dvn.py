@@ -3,7 +3,7 @@ import torch.nn as nn
 from utils.timer import OurTimer
 import torch
 
-from config import FLAGS
+from options import opt
 from models.gnn_propagator import GNNPropagator
 from models.mlp import MLP
 from utils.layers import create_act
@@ -16,16 +16,15 @@ from collections import defaultdict
 class DVN(nn.Module):
     def __init__(self, n_dim, n_layers, learn_embs, layer_AGG_w_MLP, Q_mode, Q_act, reward_calculator, environment, scalable=False):
         super(DVN, self).__init__()
-        self.gnn_main = GNNPropagator([n_dim for _ in range(n_layers + 1)], n_dim, 'GAT', learn_embs, layer_AGG_w_MLP)
-        self.gnn_bd = GNNPropagator([n_dim for _ in range(n_layers + 1)], n_dim, 'GATMan', learn_embs, layer_AGG_w_MLP)
+        self.gnn_main = GNNPropagator([n_dim for _ in range(n_layers + 1)], n_dim, 'GAT', learn_embs, layer_AGG_w_MLP, opt.device)
         self.environment = environment
         self.reward_calculator = reward_calculator
         self.stride_num = int(Q_mode)  # should encapsulate into tunable interact ops
-        self.use_tunable_interact = FLAGS.interact_ops is not None
-        self.compute_gs = len({'gs', 'abds', 'ubds', 'bbds'}.intersection(set(FLAGS.emb_mode_list))) > 0
+        self.use_tunable_interact = opt.interact_ops is not None
+        self.compute_gs = len({'gs', 'abds', 'ubds', 'bbds'}.intersection(set(opt.emb_mode_list))) > 0
 
         if self.use_tunable_interact:
-            dim_interact_out = int(FLAGS.interact_ops[0])
+            dim_interact_out = int(opt.interact_ops[0])
             self._init_tunable_interact_weights(n_dim, dim_interact_out)
         else:
             # compute stride dimensions
@@ -34,11 +33,11 @@ class DVN(nn.Module):
         # compute MLP dimensions
         dim_small_list = [dim_interact_out, dim_interact_out]
         dim_big_list = [n_dim, n_dim]
-        dim_dqn_vec = len(FLAGS.emb_mode_list) * dim_interact_out
+        dim_dqn_vec = len(opt.emb_mode_list) * dim_interact_out
         dim_dqn_list = self._get_dims(dim_dqn_vec, 1)
 
-        if FLAGS.num_nodes_dqn_max > 0:
-            num_bds = len([x for x in FLAGS.emb_mode_list if 'bd' in x])
+        if opt.num_nodes_dqn_max > 0:
+            num_bds = len([x for x in opt.emb_mode_list if 'bd' in x])
             prune_in_dim = n_dim + (2+num_bds)*dim_interact_out
             prune_dim_list = self._get_dims(prune_in_dim, 1)
             self.MLP_prune = MLP(prune_in_dim, 1, num_hidden_lyr=len(prune_dim_list), activation_type='elu', hidden_channels=prune_dim_list, bn=False)
@@ -47,13 +46,13 @@ class DVN(nn.Module):
             self.MLP_g_small = None
             self.MLP_g_big = MLP(n_dim, n_dim, num_hidden_lyr=len(dim_big_list), activation_type='elu', hidden_channels=dim_big_list, bn=False)
             
-        for emb_mode in FLAGS.emb_mode_list:
+        for emb_mode in opt.emb_mode_list:
             if emb_mode == 'gs':
                 pass
             elif emb_mode == 'sgs':
                 self.MLP_sg_small = None
 
-                if FLAGS.simplified_sg_emb:
+                if opt.simplified_sg_emb:
                     self.MLP_sg = MLP(n_dim, n_dim, num_hidden_lyr=len(dim_big_list), activation_type='elu', hidden_channels=dim_big_list, bn=False)
                 else:
                     self.MLP_sg = MLP(dim_interact_out, dim_interact_out, num_hidden_lyr=len(dim_small_list), activation_type='elu', hidden_channels=dim_small_list, bn=False)
@@ -73,25 +72,25 @@ class DVN(nn.Module):
                 assert False
 
         self.MLP_final = MLP(dim_dqn_vec, 1, num_hidden_lyr=len(dim_dqn_list), activation_type='elu', hidden_channels=dim_dqn_list, bn=False)
-        self.with_bdgnn = FLAGS.with_bdgnn
-        self.gnn_per_action = FLAGS.with_gnn_per_action
+        self.with_bdgnn = opt.with_bdgnn
+        self.gnn_per_action = opt.with_gnn_per_action
         self.Q_activation = Q_act
         self.Q_act = create_act(self.Q_activation.split('+')[0])
         self.act = create_act('elu')
         self.cache_d = {}
-        self.emb_mode_list_bd = [x for x in FLAGS.emb_mode_list if 'bd' in x]
+        self.emb_mode_list_bd = [x for x in opt.emb_mode_list if 'bd' in x]
 
         # TODO: rm me!
         self.timer = OurTimer()
         self.scalable = scalable
 
     def _create_default_emb(self, dim_interact_out):
-        if FLAGS.default_emb == 'learnable':
+        if opt.default_emb == 'learnable':
             rtn = torch.nn.Parameter(torch.randn(1, dim_interact_out), requires_grad=True)
             nn.init.xavier_normal_(rtn)
-            return torch.nn.Parameter(rtn, requires_grad=True)  # torch.flatten(rtn).to(FLAGS.device)
-        elif FLAGS.default_emb == 'zeros':
-            return torch.zeros(dim_interact_out).to(FLAGS.device)
+            return torch.nn.Parameter(rtn, requires_grad=True)  # torch.flatten(rtn).to(opt.device)
+        elif opt.default_emb == 'zeros':
+            return torch.zeros(dim_interact_out).to(opt.device)
         else:
             raise NotImplementedError()
 
@@ -101,7 +100,7 @@ class DVN(nn.Module):
         #                          num_hidden_lyr=len(dim_small_list),
         #                          activation_type='elu',
         #                          hidden_channels=dim_small_list, bn=False)
-        if FLAGS.run_bds_MLP_before_interact:
+        if opt.run_bds_MLP_before_interact:
             MLP_bds_big = MLP(n_dim, n_dim,
                               num_hidden_lyr=len(dim_big_list),
                               activation_type='elu',
@@ -121,13 +120,13 @@ class DVN(nn.Module):
     def _init_tunable_interact_weights(self, in_dim, final_d):
         self.interact_weights = nn.ModuleDict()
         self.conv_keys = defaultdict(list)
-        if self.compute_gs and 'gs' not in FLAGS.emb_mode_list:
-            inter_name_list = FLAGS.emb_mode_list + ['gs']
+        if self.compute_gs and 'gs' not in opt.emb_mode_list:
+            inter_name_list = opt.emb_mode_list + ['gs']
         else:
-            inter_name_list = FLAGS.emb_mode_list
+            inter_name_list = opt.emb_mode_list
         for inter_name in inter_name_list:
             D = 0
-            for op in FLAGS.interact_ops[1:]:
+            for op in opt.interact_ops[1:]:
                 m = None
                 if op == 'chunked_dots':
                     self.stride = in_dim // self.stride_num
@@ -156,7 +155,7 @@ class DVN(nn.Module):
 
     def _tunable_interact(self, emb1, emb2, inter_name):
         interact_vec_list = []
-        for op in FLAGS.interact_ops[1:]:
+        for op in opt.interact_ops[1:]:
             m = None
             if op == 'chunked_dots':
                 interaction_list = []
@@ -209,7 +208,7 @@ class DVN(nn.Module):
         edge_index1 = dqn_input.state.edge_index1 # TODO: NOT VALID EDGE INDEX!
         edge_index2 = dqn_input.state.edge_index2
         M, N = x1_in.size(0), x2_in.size(0)
-        assert FLAGS.num_nodes_dqn_max > 0
+        assert opt.num_nodes_dqn_max > 0
 
 
         embs = self.cached_op(
@@ -261,7 +260,7 @@ class DVN(nn.Module):
     def __call__(self, x1_in, x2_in, dqn_input):
         s_raw_list, s_raw_q_vec_idx_list = [], []
         v_list, w_list, _ = dqn_input.action_space_data.action_space
-        q_vec = torch.zeros(len(v_list)).to(FLAGS.device)
+        q_vec = torch.zeros(len(v_list)).to(opt.device)
         edge_index1 = dqn_input.valid_edge_index1
         edge_index2 = dqn_input.valid_edge_index2
 
@@ -332,7 +331,7 @@ class DVN(nn.Module):
             state_embs = torch.cat((g_embs, sg_embs, bd_embs), dim=-1)
 
             q_vec_raw = self.MLP_final(state_embs).view(-1)
-            if FLAGS.device == 'cpu':
+            if opt.device == 'cpu':
                 s_raw_q_vec_idx = torch.LongTensor(s_raw_q_vec_idx_list).view(-1)
             else:
                 s_raw_q_vec_idx = torch.cuda.LongTensor(s_raw_q_vec_idx_list).view(-1)
@@ -342,7 +341,7 @@ class DVN(nn.Module):
                 s_raw_q_vec = self.Q_act(q_vec_raw)  # (num_actions, 1)
             scatter_add(self.reward_calculator.discount * s_raw_q_vec, s_raw_q_vec_idx, out=q_vec) # Q += DVN(state)
 
-        if FLAGS.time_analysis:
+        if opt.time_analysis:
             timer = OurTimer()
         else:
             timer = None
@@ -496,7 +495,7 @@ class DVN(nn.Module):
             bds1_list_raw = torch.stack(tuple(bds1_list_raw), dim=0)
             bds2_list_raw = torch.stack(tuple(bds2_list_raw), dim=0)
 
-            if FLAGS.no_bd_MLPs:
+            if opt.no_bd_MLPs:
                 # TODO: I put this here so that i can load models with MLP_abd_..., put this init in future
                 bds1_list = bds1_list_raw
                 bds2_list = bds2_list_raw
@@ -518,14 +517,14 @@ class DVN(nn.Module):
                 mode
             )  # num_bds by D
 
-            if FLAGS.attention_bds:
+            if opt.attention_bds:
                 # assert gs.shape[0] == 1
                 att = torch.matmul(bds_list, gs.t())
                 att = F.softmax(att, 0)
                 bds_list = bds_list * att
 
             # else:
-            if FLAGS.no_bd_MLPs:
+            if opt.no_bd_MLPs:
                 # TODO: I put this here so that i can load models with MLP_abd_..., put this init in future
                 print('@@@@@@@@@@@@@@@@@@@@@')
                 bds = torch.sum(bds_list, dim=0).view(1, -1)
@@ -538,7 +537,7 @@ class DVN(nn.Module):
             else:
                 assert False
 
-            if FLAGS.normalize_emb:
+            if opt.normalize_emb:
                 bds = F.normalize(bds, dim=1, p=2)
 
             bds_out = default_vec + bds
@@ -563,13 +562,13 @@ class DVN(nn.Module):
             D = x1.size(1) # TODO: assert x1.size(1) == x2.size(1)
 
 
-            bds1_list_raw = torch.zeros(len(all_bidomains), D, dtype=torch.float, device=FLAGS.device)
-            bds2_list_raw = torch.zeros(len(all_bidomains), D, dtype=torch.float, device=FLAGS.device)
+            bds1_list_raw = torch.zeros(len(all_bidomains), D, dtype=torch.float, device=opt.device)
+            bds2_list_raw = torch.zeros(len(all_bidomains), D, dtype=torch.float, device=opt.device)
             for i, bidomain in enumerate(all_bidomains):
                 bds1_list_raw[i] += torch.sum(x1[list(bidomain.left)], dim=0)
                 bds2_list_raw[i] += torch.sum(x2[list(bidomain.right)], dim=0)
 
-            if FLAGS.no_bd_MLPs:
+            if opt.no_bd_MLPs:
                 # TODO: I put this here so that i can load models with MLP_abd_..., put this init in future
                 bds1_list = bds1_list_raw
                 bds2_list = bds2_list_raw
@@ -591,14 +590,14 @@ class DVN(nn.Module):
                 mode
             )  # num_bds by D
 
-            if FLAGS.attention_bds:
+            if opt.attention_bds:
                 # assert gs.shape[0] == 1
                 att = torch.matmul(bds_list, gs.t())
                 att = F.softmax(att, 0)
                 bds_list = bds_list * att
 
             # else:
-            if FLAGS.no_bd_MLPs:
+            if opt.no_bd_MLPs:
                 # TODO: I put this here so that i can load models with MLP_abd_..., put this init in future
                 print('@@@@@@@@@@@@@@@@@@@@@')
                 bds = torch.sum(bds_list, dim=0).view(1, -1)
@@ -611,7 +610,7 @@ class DVN(nn.Module):
             else:
                 assert False
 
-            if FLAGS.normalize_emb:
+            if opt.normalize_emb:
                 bds = F.normalize(bds, dim=1, p=2)
 
             bds_out = default_vec + bds

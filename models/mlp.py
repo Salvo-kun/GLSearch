@@ -10,8 +10,7 @@ class MLP(Module):
         self.out_dim = output_dim
         
         if not hidden_channels:
-            hidden_channels = [input_dim for _ in range(num_hidden_lyr)]
-            
+            hidden_channels = [input_dim for _ in range(num_hidden_lyr)]      
         elif len(hidden_channels) != num_hidden_lyr:
             raise ValueError("number of hidden layers should be the same as the lengh of hidden_channels")
         
@@ -37,4 +36,3 @@ class MLP(Module):
             layer_inputs[-1] = self.bn(layer_inputs[-1])
             
         return layer_inputs[-1]
-

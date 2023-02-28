@@ -17,6 +17,7 @@ class DebugOptions:
         self.scalable = 'False'        
         self.loss_func = 'MSE'
         self.smarter_bin_sampling = 'False'
+        self.smart_bin_sampling = 'True'
         self.no_trivial_pairs = 'True'
         self.reward_calculator_mode = 'vanilla'
         self.interact_ops = ['32', '1dconv+max_1', 'add']
@@ -34,3 +35,16 @@ class DebugOptions:
         self.supervised_before = 1
         self.imitation_before = 1
         self.a2c_networks = 'False'
+        self.val_debug = 'False'
+        self.batch_size = 1
+        self.num_bds_max = 1
+        self.num_nodes_degree_max = 20
+        self.num_nodes_dqn_max = -1
+        self.val_method_list = ['dqn']
+        self.logging = 'end'
+        self.inverse_bd_size_order = 'False'
+        self.use_mcsp_policy = 'False'
+        self.exclude_root = 'False'
+        self.plot_final_tree = 'True'
+        self.randQ = ' False'
+        self.node_feats_for_mcs = ['type']

@@ -2,7 +2,7 @@ from collections import defaultdict
 import random
 from torch.nn import MSELoss, BCEWithLogitsLoss
 from models.base_model import BaseModel
-from utils.options import parse_bool, get_option_value
+from utils.options import parse_bool
 from utils.validation import validate, IS_POSITIVE, IS_BETWEEN_0_AND_1
 from copy import deepcopy
 import numpy as np
@@ -16,6 +16,7 @@ from utils.data_structures.dqn_input import DQNInput
 from models.dqn import Q_network_v1
 from utils.reward_calculator import RewardCalculator
 from utils.saver import saver
+from options import opt
 
 class McspVec():
     def __init__(self, ldeg, rdeg):
@@ -54,8 +55,8 @@ class MethodConfig():
         self.regret_iters = regret_iters
 
 class MCSplitRLBacktrack(BaseModel):
-    def __init__(self, opt, **kwargs):
-        super(MCSplitRLBacktrack, self).__init__(opt)
+    def __init__(self, **kwargs):
+        super(MCSplitRLBacktrack, self).__init__()
         
         self.encoder_type = kwargs['encoder_type']
         self.embedder_type = kwargs['embedder_type']
@@ -76,7 +77,7 @@ class MCSplitRLBacktrack(BaseModel):
         self.regret_iters = validate(int(kwargs['regret_iters']), int, IS_POSITIVE, None)
         self.buffer_size = validate(int(kwargs['buffer_size']), int, IS_POSITIVE)
         self.tot_num_train_pairs = validate(kwargs['tot_num_train_pairs'], int, IS_POSITIVE)
-        self.global_loss_func = validate(get_option_value(self.opt, 'loss_func'), str, lambda x: x in ['MSE', 'BCEWithLogits']) # TODO validate inside config
+        self.global_loss_func = validate(opt.loss_func, str, lambda x: x in ['MSE', 'BCEWithLogits']) # TODO validate inside config
         self.Q_sampling = validate(kwargs['Q_sampling'], str)
         self.feat_map = validate(kwargs['feat_map'], dict)
         self.perc_IL = validate(float(kwargs['perc_IL']), float, IS_BETWEEN_0_AND_1, -1.0)
@@ -104,16 +105,16 @@ class MCSplitRLBacktrack(BaseModel):
         self.global_iter_debugging = 20       
         self.train_counter = -1
         self.curriculum_info = defaultdict(dict)  
-        self.sample_strat, self.biased = ('sg', 'full') if get_option_value(self.opt, 'smarter_bin_sampling') else (('q_max', None) if get_option_value(self.opt, 'smart_bin_sampling') else (None, 'biased'))
-        self.buffer = BinBuffer(self.buffer_size, sample_strat=self.sample_strat, biased=self.biased, no_trivial_pairs=get_option_value(self.opt, 'no_trivial_pairs'))
-        self.reward_calculator = RewardCalculator(get_option_value(self.opt, 'reward_calculator_mode'), self.feat_map, self.calc_bound)
+        self.sample_strat, self.biased = ('sg', 'full') if opt.smarter_bin_sampling else (('q_max', None) if opt.smart_bin_sampling else (None, 'biased'))
+        self.buffer = BinBuffer(self.buffer_size, sample_strat=self.sample_strat, biased=self.biased, no_trivial_pairs=opt.no_trivial_pairs)
+        self.reward_calculator = RewardCalculator(opt.reward_calculator_mode, self.feat_map, self.calc_bound)
         self.dqn, self.dqn_tgt = [Q_network_v1(self.encoder_type, self.embedder_type, self.interact_type, self.in_dim, self.n_dim, self.n_layers, self.GNN_mode, self.learn_embs, self.layer_AGG_w_MLP, self.Q_mode, self.Q_act, self.reward_calculator, self._environment)] * 2        
         self.forward_config_dict = self.get_forward_config_dict(self.restore_bidomains, self.total_runtime, self.recursion_threshold, self.q_signal)
         self.method_config_dict = self.get_method_config_dict(self.DQN_mode, self.regret_iters)
-        self.time_analysis = parse_bool(get_option_value(self.opt, 'time_analysis'))
+        self.time_analysis = parse_bool(opt.time_analysis)
         self.timer = OurTimer() if self.time_analysis else None
-        self.val_every_iter, self.supervised_before, self.imitation_before = get_option_value(self.opt, 'val_every_iter'), get_option_value(self.opt, 'supervised_before'), get_option_value(self.opt, 'imitation_before')
-        self.a2c_networks = get_option_value(self.opt, 'a2c_networks')
+        self.val_every_iter, self.supervised_before, self.imitation_before = opt.val_every_iter, opt.supervised_before, opt.imitation_before
+        self.a2c_networks = opt.a2c_networks
         
     #########################################################
     # Forward Procedure
@@ -125,7 +126,7 @@ class MCSplitRLBacktrack(BaseModel):
         forward_mode = self.get_forward_mode(iter)
         self.apply_forward_config(self.forward_config_dict[forward_mode])            
             
-        methods = get_option_value(self.opt, 'val_method_list') if forward_mode == TEST_MODE else (['dqn'] if forward_mode == TRAIN_MODE else ['mcspv2'])
+        methods = opt.val_method_list if forward_mode == TEST_MODE else (['dqn'] if forward_mode == TRAIN_MODE else ['mcspv2'])
         for method in methods:
             # run forward model
             self.apply_method_config(self.method_config_dict[method])
@@ -182,7 +183,7 @@ class MCSplitRLBacktrack(BaseModel):
             # update incumbent
             if self.is_better_solution(cur_state, incumbent):
                 incumbent = deepcopy(cur_state.nn_map)
-                if get_option_value(self.opt, 'logging') == 'all':
+                if opt.logging == 'all':
                     incumbent_list.append([incumbent, recursion_count, timer.get_duration()])
 
             # check for exit conditions
@@ -265,8 +266,8 @@ class MCSplitRLBacktrack(BaseModel):
         self.search_path = None
         self.no_pruning = None
 
-        total_runtime_test = validate(get_option_value(self.opt, 'total_runtime'), int, IS_POSITIVE, None)
-        recursion_threshold_test = validate(get_option_value(self.opt, 'recursion_threshold'), int, IS_POSITIVE, None)
+        total_runtime_test = validate(opt.total_runtime, int, IS_POSITIVE, None)
+        recursion_threshold_test = validate(opt.recursion_threshold, int, IS_POSITIVE, None)
 
         forward_config_dict = {
             PRETRAIN_MODE:
@@ -378,9 +379,9 @@ class MCSplitRLBacktrack(BaseModel):
             num_nodes_degree = float('inf')
             num_nodes_dqn = float('inf')
         else:
-            num_bds = float('inf') if get_option_value(self.opt, 'num_bds_max') < 0 else get_option_value(self.opt, 'num_bds_max') 
-            num_nodes_degree = float('inf') if get_option_value(self.opt, 'num_nodes_degree_max') < 0 else get_option_value(self.opt, 'num_nodes_degree_max')
-            num_nodes_dqn = float('inf') if get_option_value(self.opt, 'num_nodes_dqn_max') < 0 else get_option_value(self.opt, 'num_nodes_dqn_max')
+            num_bds = float('inf') if opt.num_bds_max < 0 else opt.num_bds_max
+            num_nodes_degree = float('inf') if opt.num_nodes_degree_max < 0 else opt.num_nodes_degree_max
+            num_nodes_dqn = float('inf') if opt.num_nodes_dqn_max < 0 else opt.num_nodes_dqn_max
 
         return num_bds, num_nodes_degree, num_nodes_dqn
 
@@ -449,7 +450,7 @@ class MCSplitRLBacktrack(BaseModel):
 
     def _filter_topk_bds_by_size(self, bds, bd_indices, num_bds_max):
         degree_list = np.array([max(len(bd.left), len(bd.right)) for bd in bds])
-        if get_option_value(self.opt, 'inverse_bd_size_order'):
+        if opt.inverse_bd_size_order:
             degree_list_sorted = degree_list.argsort(kind='mergesort')[::-1]
         else:
             degree_list_sorted = degree_list.argsort(kind='mergesort')
@@ -475,7 +476,7 @@ class MCSplitRLBacktrack(BaseModel):
             # set up general input data
             g1, g2 = pair.g1.get_nxgraph(), pair.g2.get_nxgraph()
             ins_g1, ins_g2, offset = self.compute_ins(g1, g2, ins, offset)
-            edge_index1, edge_index2 = create_edge_index(g1, get_option_value(self.opt, 'device')), create_edge_index(g2, get_option_value(self.opt, 'device'))
+            edge_index1, edge_index2 = create_edge_index(g1, opt.device), create_edge_index(g2, opt.device)
             adj_list1, adj_list2 = create_adj_set(g1), create_adj_set(g2)
             nn_map = {}
             bidomains, abidomains, ubidomains = self._update_bidomains(g1, g2, nn_map, None, None)
@@ -483,7 +484,7 @@ class MCSplitRLBacktrack(BaseModel):
 
             # set up special input data
             degree_mat, mcsp_vec, sgw_mat, pca_mat = None, None, None, None
-            if self.DQN_mode in ['fixedv_mcsp', 'fixedv_mcsprl'] or get_option_value(self.opt, 'use_mcsp_policy'):
+            if self.DQN_mode in ['fixedv_mcsp', 'fixedv_mcsprl'] or opt.use_mcsp_policy:
                 mcsp_vec = self.get_mcsp_vec(g1, g2)
 
             # create input data object
@@ -579,17 +580,17 @@ class MCSplitRLBacktrack(BaseModel):
     def post_process(self, search_tree, incumbent_list):
         if self.training:
             search_tree.assign_v_search_tree(self.reward_calculator.discount)
-            if get_option_value(self.opt, 'val_debug'):
+            if opt.val_debug:
                 search_tree.associate_q_pred_true_with_node()
         else:
-            if get_option_value(self.opt, 'logging') == 'end':
+            if opt.logging == 'end':
                 incumbent_end, recursion_iter_end, time_end = incumbent_list[-1]
                 saver.log_info('=========================')
                 saver.log_info(f'length of largest incumbent: {len(incumbent_end)}')
                 saver.log_info(f'iteration at end: {recursion_iter_end}')
                 saver.log_info(f'time at end: {time_end}')
                 saver.log_info('=========================')
-            elif get_option_value(self.opt, 'logging') == 'all':
+            elif opt.logging == 'all':
                 saver.log_list_of_lists_to_csv(incumbent_list, 'incumbents.csv')
             else:
                 assert False
@@ -597,7 +598,7 @@ class MCSplitRLBacktrack(BaseModel):
     def search_tree2buffer_entry_list(self, search_tree, pair):
         if self.training:
             g1, g2 = pair.g1.get_nxgraph(), pair.g2.get_nxgraph()
-            if get_option_value(self.opt, 'exclude_root'):
+            if opt.exclude_root:
                 buffer_entry_list = [BufferEntry(edge, g1, g2, search_tree) for edge in search_tree.edges if edge.state_prev.action_prev is not None]
             else:
                 buffer_entry_list = [BufferEntry(edge, g1, g2, search_tree) for edge in search_tree.edges]
@@ -624,7 +625,7 @@ class MCSplitRLBacktrack(BaseModel):
     ##########################################################
     def compute_q_vec(self, state, action_space_data):
         # estimate the q values
-        if len(action_space_data.action_space[0]) > 1 or get_option_value(self.opt, 'plot_final_tree'):
+        if len(action_space_data.action_space[0]) > 1 or opt.plot_final_tree:
             # we want all q_pred if we are plotting tree!
             q_vec = self._Q_network(state, action_space_data, tgt_network=False, detach_in_chunking_stage=True)
         else:
@@ -678,7 +679,7 @@ class MCSplitRLBacktrack(BaseModel):
         return eps
 
     def _rank_actions_from_q_vec(self, q_vec, state, action_space_data):
-        if get_option_value(self.opt, 'use_mcsp_policy'):
+        if opt.use_mcsp_policy:
             q_vec = self.fixed_v(action_space_data, state, 'mcsp')
 
         # compute epsilon (eps-greedy)
@@ -692,7 +693,7 @@ class MCSplitRLBacktrack(BaseModel):
 
         # epsilon greedy policy
         q_vec_idx_argmax = torch.argmax(q_vec, dim=0)
-        if random.random() < eps or get_option_value(self.opt, 'randQ'):
+        if random.random() < eps or opt.randQ:
             q_vec_idx = int(random.random() * q_vec.size(0))
         else:
             q_vec_idx = q_vec_idx_argmax
@@ -795,10 +796,10 @@ class MCSplitRLBacktrack(BaseModel):
             assert action is None
             assert bidomains is None
 
-            if 'fuzzy_matching' in get_option_value(self.opt, 'reward_calculator_mode'):
+            if 'fuzzy_matching' in opt.reward_calculator_mode:
                 natts = []
             else:
-                natts = get_option_value(self.opt, 'node_feats_for_mcs')
+                natts = opt.node_feats_for_mcs
             # create a new bidomain for each unique natts
             natts2bd = {}
 
@@ -921,7 +922,7 @@ class MCSplitRLBacktrack(BaseModel):
             # edge case 1: we are still buffering
             loss = None
         else:
-            loss = torch.tensor(0.0, device=get_option_value(self.opt, 'device'))
+            loss = torch.tensor(0.0, device=opt.device)
             for buffer_entry in buffer_entry_list:
                 self._process_buffer_entry(buffer_entry)
                 loss += self._batched_loss([buffer_entry])
@@ -970,7 +971,7 @@ class MCSplitRLBacktrack(BaseModel):
         q_pred = torch.squeeze(self._Q_network(state, action_space_data, tgt_network=False))
 
         # compute q true
-        reward = torch.tensor(self.reward_calculator.compute_reward_batch(action_space_data.action_space, g1, g2, state, next_state), device=get_option_value(self.opt, 'device')).type(torch.cuda.FloatTensor)
+        reward = torch.tensor(self.reward_calculator.compute_reward_batch(action_space_data.action_space, g1, g2, state, next_state), device=opt.device).type(torch.cuda.FloatTensor)
         q_next = self._get_q_next(next_state, next_action_space_data)
         q_true = (reward + self.reward_calculator.discount * q_next).detach()
 
@@ -982,7 +983,7 @@ class MCSplitRLBacktrack(BaseModel):
             q_max = self.create_FloatTensor(0.0)
         else:
             q_vec = self._Q_network(next_state, next_action_space_data, tgt_network=True, detach_in_chunking_stage=True)
-            q_max = torch.max(q_vec.to(get_option_value(self.opt, 'device')).detach())
+            q_max = torch.max(q_vec.to(opt.device).detach())
 
         return q_max
 
@@ -1041,10 +1042,10 @@ class MCSplitRLBacktrack(BaseModel):
         return q_next
 
     def create_FloatTensor(self, li, requires_grad=False):
-        if get_option_value(self.opt, 'device') == 'cpu':
-            tsr = torch.tensor(li, requires_grad=requires_grad, device=get_option_value(self.opt, 'device')).type(torch.FloatTensor)
+        if opt.device == 'cpu':
+            tsr = torch.tensor(li, requires_grad=requires_grad, device=opt.device).type(torch.FloatTensor)
         else:
-            tsr = torch.tensor(li, requires_grad=requires_grad, device=get_option_value(self.opt, 'device')).type(torch.cuda.FloatTensor)
+            tsr = torch.tensor(li, requires_grad=requires_grad, device=opt.device).type(torch.cuda.FloatTensor)
         return tsr
 
     def _log_loss(self, q_pred, q_true, state, loss):

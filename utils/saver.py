@@ -1,5 +1,3 @@
-from utils.common import get_ts, create_dir_if_not_exists, save, get_our_dir, get_model_info_as_str, get_model_info_as_command, plot_scatter_line, plot_dist
-from utils.options import get_option_value
 from tensorboardX import SummaryWriter
 from collections import OrderedDict
 from pprint import pprint
@@ -8,10 +6,10 @@ import torch
 import networkx as nx
 import numpy as np
 from options import opt
+from utils.common import get_ts, create_dir_if_not_exists, save, get_our_dir, get_model_info_as_str, get_model_info_as_command, plot_scatter_line, plot_dist
 
 class Saver(object):
-    def __init__(self, opt):
-        self.opt = opt
+    def __init__(self):
         model_str = self._get_model_str()
         self.logdir = join(
             get_our_dir(),
@@ -73,7 +71,7 @@ class Saver(object):
 
     def _save_conf_code(self):
         p = join(self.get_log_dir(), 'FLAGS')
-        save({'FLAGS': self.opt}, p, print_msg=False)
+        save({'FLAGS': opt}, p, print_msg=False)
 
     def save_trained_model(self, trained_model, ext=''):
         model_dir = join(self.logdir, 'models')
@@ -108,7 +106,7 @@ class Saver(object):
         save(result_d, sp)
         self._save_to_result_file(f'iter {iter} val result', to_print=True)
         for label, data_dict in result_d.items():
-            if get_option_value(self.opt, 'val_debug'):
+            if opt.val_debug:
                 g1, g2 = data_dict['g1'], data_dict['g2']
                 nx.write_gexf(g1, join(self.get_obj_dir(), f'{cur_id}_{g1.graph["gid"]}.gexf'))
                 nx.write_gexf(g2, join(self.get_obj_dir(), f'{cur_id}_{g2.graph["gid"]}.gexf'))
@@ -157,14 +155,14 @@ class Saver(object):
 
     def _get_model_str(self):
         li = []
-        key_flags = [get_option_value(self.opt, 'model'), get_option_value(self.opt, 'dataset')]
+        key_flags = [opt.model, opt.dataset]
         for f in key_flags:
             li.append(str(f))
         return '_'.join(li)
 
     def _log_model_info(self):
-        s = get_model_info_as_str(self.opt)
-        c = get_model_info_as_command(self.opt)
+        s = get_model_info_as_str(opt)
+        c = get_model_info_as_command(opt)
         self.model_info_f.write(s)
         self.model_info_f.write('\n\n')
         self.model_info_f.write(c)
@@ -202,4 +200,4 @@ class Saver(object):
         return pairs
 
 
-saver = Saver(opt)  # can be used by `from saver import saver`
+saver = Saver()  # can be used by `from saver import saver`

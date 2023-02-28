@@ -104,7 +104,7 @@ class BaseOptions():
         self.parser.add_argument('--only_iters_for_debug', type=int, default=None)
         self.parser.add_argument('--time_analysis', type=bool, default=False)
         self.parser.add_argument('--save_model', type=bool, default=True)
-        # self.parser.add_argument('--node_ordering', default=node_ordering) # TODO
+        self.parser.add_argument('--node_ordering', default=None) 
         self.parser.add_argument('--scalable', type=bool, default=None) 
         self.parser.add_argument('--exclude_root', default=False)
         
@@ -128,6 +128,7 @@ class BaseOptions():
             self.retain_graph = null_coalescence(self.opt.retain_graph, True)
             self.opt.recursion_threshold = null_coalescence(self.opt.recursion_threshold, 80)            
             
+        self.opt.node_ordering = null_coalescence(self.opt.node_ordering, None if 'syn' in self.opt.dataset or 'pdb' in self.opt.dataset else 'bfs')
         self.opt.total_runtime = null_coalescence(self.opt.total_runtime, -1)
         self.opt.scalable = null_coalescence(self.opt.scalable, True if len(self.opt.dataset_list) == 1 else False)
                 

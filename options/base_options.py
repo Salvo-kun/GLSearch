@@ -1,4 +1,6 @@
 import argparse
+import os
+from utils.validation import null_coalescence
 
 class BaseOptions():
     def __init__(self):
@@ -66,12 +68,12 @@ class BaseOptions():
         self.parser.add_argument('--inverse_bd_size_order', type=bool, default=False)
         self.parser.add_argument('--num_bds_max', type=int, default=1)
         self.parser.add_argument('--num_nodes_dqn_max', type=int, default=-1)
-        self.parser.add_argument('--val_every_iter', type=int, default=100) 
+        self.parser.add_argument('--val_every_iter', type=int, default=None) 
         self.parser.add_argument('--val_debug', type=bool, default=False)
         self.parser.add_argument('--clipping_val', type=float, default=-1)
         self.parser.add_argument('--loss_func', default='MSE')
-        self.parser.add_argument('--supervised_before', type=int, default=1250)
-        self.parser.add_argument('--imitation_before', type=int, default=3750)
+        self.parser.add_argument('--supervised_before', type=int, default=None)
+        self.parser.add_argument('--imitation_before', type=int, default=None)
         self.parser.add_argument('--attention_bds', type=bool, default=False)
         self.parser.add_argument('--simplified_sg_emb', type=bool, default=True)
         self.parser.add_argument('--emb_mode_list', type=list, default=['gs', 'sgs', 'abds', 'ubds'])
@@ -83,9 +85,9 @@ class BaseOptions():
         self.parser.add_argument('--use_mcsp_policy', type=bool, default=False)
         self.parser.add_argument('--layer_num', type=int, default=1) 
         self.parser.add_argument('--layer_1', type=int, default=layer_1)
-        self.parser.add_argument('--recursion_threshold', type=int, default=80)
-        self.parser.add_argument('--total_runtime', type=int, default=-1)
-        self.parser.add_argument('--num_nodes_degree_max', type=int, default=-1)
+        self.parser.add_argument('--recursion_threshold', type=int, default=None)
+        self.parser.add_argument('--total_runtime', type=int, default=None)
+        self.parser.add_argument('--num_nodes_degree_max', type=int, default=None)
         # self.parser.add_argument('--align_metric', default=align_metric) # TODO
         self.parser.add_argument('--reward_calculator_mode', default='vanilla')
         # self.parser.add_argument('--node_feats_for_mcs', default=natts_mcs)  # TODO
@@ -94,7 +96,7 @@ class BaseOptions():
         self.parser.add_argument('--tvt_strategy', default='holdout')
         self.parser.add_argument('--train_test_ratio', type=float, default=0.8)
         self.parser.add_argument('--lr', type=float, default=1e-4)
-        self.parser.add_argument('--retain_graph', type=bool, default=True) 
+        self.parser.add_argument('--retain_graph', type=bool, default=None) 
         self.parser.add_argument('--periodic_save', type=int, default=100)
         self.parser.add_argument('--validation', type=bool, default=False)
         self.parser.add_argument('--throw_away', type=float, default=0)
@@ -115,29 +117,18 @@ class BaseOptions():
         self.opt = self.parser.parse_args()
         
         if self.opt.load_model:
-            self.opt.supervised_before = -1
-            self.opt.imitation_before = -1 
-            self.val_every_iter = 1
-            self.retain_graph = False
+            self.opt.supervised_before = null_coalescence(self.opt.supervised_before, -1) 
+            self.opt.imitation_before = null_coalescence(self.opt.imitation_before, -1) 
+            self.val_every_iter = null_coalescence(self.opt.val_every_iter, 1)
+            self.retain_graph = null_coalescence(self.opt.retain_graph, False)
+        else:
+            self.opt.supervised_before = null_coalescence(self.opt.supervised_before, 1250)
+            self.opt.imitation_before = null_coalescence(self.opt.imitation_before, 3750)
+            self.val_every_iter = null_coalescence(self.opt.val_every_iter, 100)
+            self.retain_graph = null_coalescence(self.opt.retain_graph, True)
+            self.opt.recursion_threshold = null_coalescence(self.opt.recursion_threshold, 80)            
             
-            if self.opt.phase != 'train':
-                self.opt.recursion_threshold = 10000 if len(self.opt.dataset_list) == 1 else 7500
-            else:
-                self.opt.recursion_threshold = -1
-                
-        if self.opt.num_nodes_degree_max == -1:
-            if len(self.opt.dataset_list) == 1 and self.opt.phase == 'test':
-                self.opt.num_nodes_degree_max = 3*self.opt.num_bds_max 
-            else:        
-                self.opt.num_nodes_degree_max = 20*self.opt.num_bds_max
-            
-        if self.opt.total_runtime == -1:
-            if self.opt.phase != 'train' and len(self.opt.dataset_list) == 1:
-                self.opt.total_runtime = 360 
-            elif self.opt.phase == 'train' and self.opt.load_model:
-                self.opt.total_runtime = 6000 
-            
-        if self.opt.phase == 'train' or len(self.opt.dataset_list) == 1:
-            self.opt.scalable = True
+        self.opt.total_runtime = null_coalescence(self.opt.total_runtime, -1)
+        self.opt.scalable = null_coalescence(self.opt.scalable, True if len(self.opt.dataset_list) == 1 else False)
                 
         return self.opt

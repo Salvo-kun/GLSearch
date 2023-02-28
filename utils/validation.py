@@ -9,3 +9,9 @@ def validate(value, value_type, is_valid=lambda *_: True, default='default'):
     else:
         assert (default != 'default')
         return default
+    
+def null_coalescence(current_value, default_value):
+    if current_value is None:
+        return default_value
+    
+    return current_value

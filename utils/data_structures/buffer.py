@@ -1,6 +1,7 @@
 from collections import deque, Counter, defaultdict
 from utils.data_structures.search_tree import unroll_bidomains
 import numpy as np
+from options import opt
 
 #########################################################################
 # Experience Buffer
@@ -26,25 +27,24 @@ class ExperienceBuffer:
 #########################################################################
 # Bin Buffer
 #########################################################################
-# maybe clean this up a bit later
+# maybe clean this up a bit late
 # Bin Buffer has SAME INTERFACE as experience buffer but samples evenly by
 # hashing function i.e. nearest rounded down int of (q_max_UB + q_max_LB)/2
 class BinBuffer:
-    def __init__(self, capacity, sample_strat, biased=None, scalable=False, no_trivial_pairs=False):
+    def __init__(self, capacity, sample_strat, biased=None, no_trivial_pairs=False):
         self.bins = defaultdict(list)
         self.history = []
         self.sample_strat = sample_strat
         self.biased = biased
         self.replace = self.biased != 'full'
         self.capacity = capacity
-        self.scalable = scalable
         self.no_trivial_pairs = no_trivial_pairs
 
     def __len__(self):
         return len(self.history)
 
     def filter(self, experiences):
-        if self.scalable:
+        if opt.scalable:
             good_experiences = [experience for experience in experiences if not self._is_trivial(experience)]
         else:
             good_experiences = [experience for experience in experiences if self.bin_hash(experience) >= 0]
@@ -71,7 +71,7 @@ class BinBuffer:
         for experience in experiences:
             bin_key = self.bin_hash(experience)
             if self.no_trivial_pairs:
-                if self.scalable:
+                if opt.scalable:
                     if self._is_trivial(experience):
                         continue  # TODO: make this code prettier in the future
                 else:

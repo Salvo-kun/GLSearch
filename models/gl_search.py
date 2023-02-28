@@ -9,7 +9,7 @@ import time
 class GLSearch(BaseModel):
     def __init__(self, num_node_feat, feat_map, tot_num_train_pairs):
         super(GLSearch, self).__init__()
-        self.scalable = parse_bool(opt.scalable)
+        self.scalable = parse_bool(opt.scalable
         self.num_node_feat = num_node_feat
         self.feat_map = feat_map
         self.tot_num_train_pairs = tot_num_train_pairs

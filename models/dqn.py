@@ -8,7 +8,7 @@ from models.dvn import DVN
 class Q_network_v1(nn.Module):
     def __init__(self, encoder_type, embedder_type, interact_type, in_dim, n_dim,
                  n_layers, GNN_mode, learn_embs, layer_AGG_w_MLP, Q_mode, Q_act,
-                 reward_calculator=None, environment=None, scalable=False):
+                 reward_calculator=None, environment=None):
         super(Q_network_v1, self).__init__()
         # TODO: figure out a way to not have to pass in as variables
         #  -> just pass encoder_args, embedder_args, interactor_args
@@ -16,13 +16,12 @@ class Q_network_v1(nn.Module):
         self.embedder_type = embedder_type
         self.interact_type = interact_type
         self.encode = EncoderMLP(in_dim, n_dim)
-        self.scalable=scalable
         if interact_type == 'dvn':
             self.embed = None
             self.interact = None
             self.dvn = DVN(
                 n_dim, n_layers, learn_embs, layer_AGG_w_MLP, Q_mode, Q_act, reward_calculator,
-                environment, self.scalable)
+                environment)
         else:
             assert False
 
@@ -80,7 +79,7 @@ class Q_network_v1(nn.Module):
             action_space_chunk,
             dqn_input.action_space_data.unexhausted_bds,
             dqn_input.action_space_data.bds,
-            dqn_input.action_space_data.bdids)  if not self.scalable else ActionSpaceDataScalable(
+            dqn_input.action_space_data.bdids)  if not opt.scalable else ActionSpaceDataScalable(
 	            action_space_chunk,
 	            dqn_input.action_space_data.natts2bds_unexhausted,
 	            dqn_input.action_space_data.action_space_size_unexhausted_unpruned)

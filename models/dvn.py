@@ -14,7 +14,7 @@ from collections import defaultdict
 
 
 class DVN(nn.Module):
-    def __init__(self, n_dim, n_layers, learn_embs, layer_AGG_w_MLP, Q_mode, Q_act, reward_calculator, environment, scalable=False):
+    def __init__(self, n_dim, n_layers, learn_embs, layer_AGG_w_MLP, Q_mode, Q_act, reward_calculator, environment):
         super(DVN, self).__init__()
         self.gnn_main = GNNPropagator([n_dim for _ in range(n_layers + 1)], n_dim, 'GAT', learn_embs, layer_AGG_w_MLP, opt.device)
         self.environment = environment
@@ -82,7 +82,6 @@ class DVN(nn.Module):
 
         # TODO: rm me!
         self.timer = OurTimer()
-        self.scalable = scalable
 
     def _create_default_emb(self, dim_interact_out):
         if opt.default_emb == 'learnable':
@@ -405,7 +404,7 @@ class DVN(nn.Module):
         emb_list = []
         x1_in, x2_in = embs
         for emb_mode in self.emb_mode_list_bd:
-            if self.scalable:
+            if opt.scalable:
                 if emb_mode == 'abds':
                     bds1_list_raw, bds2_list_raw = [], []
                     for bidomain in unroll_bidomains(state.natts2bds):
@@ -479,7 +478,7 @@ class DVN(nn.Module):
         return bd_embs_collate
 
     def state_is_leaf_node(self, state):
-        return len(unroll_bidomains(state.natts2bds)) == 0 if self.scalable else len(state.bidomains) == 0
+        return len(unroll_bidomains(state.natts2bds)) == 0 if opt.scalable else len(state.bidomains) == 0
     
     def _get_bds_scalable(self, bds1_list_raw, bds2_list_raw, mode, state, gs, q_vec_idx, timer):
         if mode == 'abds':

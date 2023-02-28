@@ -2,6 +2,7 @@ from utils.data_structures.common import DoubleDict
 from collections import defaultdict
 from copy import deepcopy
 import networkx as nx
+from options import opt
 
 #########################################################################
 # Bidomain
@@ -93,7 +94,7 @@ class StateNode(object):
                  edge_index1, edge_index2, adj_list1, adj_list2, g1, g2,
                  degree_mat, sgw_mat, pca_mat, cur_id, mcsp_vec, MCS_size_UB,
                  explore_n_pairs=None, pruned_actions=None, exhausted_v=None,
-                 exhausted_w=None, tree_depth=0, num_steps=0, cum_reward=0, scalable = False):
+                 exhausted_w=None, tree_depth=0, num_steps=0, cum_reward=0):
         self.ins_g1 = ins_g1
         self.ins_g2 = ins_g2
         self.edge_index1 = edge_index1
@@ -108,7 +109,7 @@ class StateNode(object):
         self.x1 = None
         self.x2 = None
         self.nn_map = nn_map
-        if scalable:
+        if opt.scalable:
             self.nn_map_neighbors = bidomains_or_nn_map_neighbors
             self.natts2bds = abidomains_or_natts2bds
             self.natts2g2nids = ubidomains_or_natts2g2nids
@@ -118,7 +119,6 @@ class StateNode(object):
             self.ubidomains = ubidomains_or_natts2g2nids
         self.q_vec = None
         self.recompute = False
-        self.scalable = scalable
 
         # for additional pruning
         self.pruned_actions = DoubleDict() if pruned_actions is None else pruned_actions
@@ -379,9 +379,8 @@ class ActionEdge(object):
 # Search Tree
 #########################################################################
 class SearchTree(object):
-    def __init__(self, root, scalable=False):
+    def __init__(self, root):
         self.root = root
-        self.scalable = scalable
         self.nodes = {root}
         self.edges = set()
         self.nxgraph = nx.Graph()
@@ -439,12 +438,12 @@ class SearchTree(object):
         search_tree_list = []
         root_list = self.root.disentangle_paths()
         for root in root_list:
-            search_tree_list.append(SearchTree(root, self.scalable))
+            search_tree_list.append(SearchTree(root))
         return search_tree_list
 
     def assign_v_search_tree(self, discount):
         self.root.assign_v(discount)
-        if not self.scalable:
+        if not opt.scalable:
             for node in self.nodes:
                 self.assign_val_to_node(node.nid, 'v_search_tree', node.v_search_tree)
              

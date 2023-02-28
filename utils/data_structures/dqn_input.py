@@ -1,8 +1,9 @@
 import torch
 from utils.data_structures.search_tree import ActionSpaceData
+from options import opt
 
 class DQNInput:
-    def __init__(self, state, action_space_data, restore_bidomains, scalable = False):#, TIMER=None, recursion_count=None):
+    def __init__(self, state, action_space_data, restore_bidomains):#, TIMER=None, recursion_count=None):
         self.restore_bidomains = restore_bidomains
         self.pair_id = (state.g1.graph['gid'], state.g2.graph['gid'])
         self.exhausted_v = state.exhausted_v
@@ -13,9 +14,8 @@ class DQNInput:
             state.edge_index2, state.adj_list2, state.exhausted_w)#, TIMER, recursion_count, '2')
         self.action_space_data = action_space_data
         self.state = state
-        self.scalable = scalable
         
-        if not self.scalable:
+        if not opt.scalable:
         # TODO: assert action_space_data
             for v,w in zip(action_space_data.action_space[0], action_space_data.action_space[1]):
                 action_space_data = self._get_empty_action_space_data(state)

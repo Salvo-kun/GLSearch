@@ -115,6 +115,7 @@ class MCSplitRLBacktrack(BaseModel):
         self.timer = OurTimer() if self.time_analysis else None
         self.val_every_iter, self.supervised_before, self.imitation_before = opt.val_every_iter, opt.supervised_before, opt.imitation_before
         self.a2c_networks = opt.a2c_networks
+        self.pca = None # TODO removed because not used with standard configuration
         
     #########################################################
     # Forward Procedure

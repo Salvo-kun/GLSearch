@@ -18,11 +18,11 @@ class Bidomain(object):
     def __len__(self):
         return len(self.left) * len(self.right)
 
-def get_natts_hash(node, reward_calculator_mode, node_feats_for_mcs):
-    if 'fuzzy_matching' in reward_calculator_mode:
+def get_natts_hash(node,):
+    if 'fuzzy_matching' in opt.reward_calculator_mode:
         natts = []
     else:
-        natts = node_feats_for_mcs
+        natts = opt.node_feats_for_mcs
     natts_hash = tuple([node[natt] for natt in natts])
     return natts_hash
 
@@ -191,27 +191,6 @@ class StateNode(object):
                     action_next.reward + discount * v_max_next_state
                 state.v_search_tree = max(state.v_search_tree, q_max_cur_state)
 
-    def prune_action(self, v, w):  # , remove_nodes):
-        self.pruned_actions.add_lr(v, w)
-        # if remove_nodes:
-        for bd in unroll_bidomains(self.natts2bds):
-            if v in bd.left:
-                assert w in bd.right
-                if len(bd.right - self.pruned_actions.l2r[v]) == 0:
-                    self.exhausted_v.add(v)
-                    self.recompute = True
-                if len(bd.left - self.pruned_actions.r2l[w]) == 0:
-                    self.exhausted_w.add(w)
-                    self.recompute = True
-
-        for g2nids in self.natts2g2nids.values():
-            if len(g2nids['g2'] - self.pruned_actions.l2r[v]) == 0:
-                self.exhausted_v.add(v)
-                self.recompute = True
-            if len(g2nids['g1'] - self.pruned_actions.r2l[w]) == 0:
-                self.exhausted_w.add(w)
-                self.recompute = True
-
     def get_natts2bds_ubd_unexhausted(self):
         natts2bds_unexhausted = defaultdict(list)
         for natts, g2nids in self.natts2g2nids.items():
@@ -219,7 +198,7 @@ class StateNode(object):
             right = g2nids['g2'] - self.exhausted_w
             if len(left) > 0 and len(right) > 0:
                 natts2bds_unexhausted[natts].append(
-                    Bidomain(left, right, natts)
+                    Bidomain(left, right, None, natts)
                 )
         return natts2bds_unexhausted
 
@@ -234,7 +213,7 @@ class StateNode(object):
                     right = bd.right - self.exhausted_w
                     if len(left) > 0 and len(right) > 0:
                         natts2bds_unexhausted[natts].append(
-                            Bidomain(left, right, natts)
+                            Bidomain(left, right, None, natts)
                         )
                 else:
                     assert len(bd.left) > 0 and len(bd.right) > 0
@@ -316,18 +295,39 @@ class StateNode(object):
             adjacent_bdids = list(range(len(pruned_bidomains)))
         return adjacent_bds, adjacent_bdids
 
-    def prune_action(self, v, w, remove_nodes):
-        self.pruned_actions.add_lr(v, w)
-        if remove_nodes:
-            for bidomain in self.bidomains:
-                if v in bidomain.left:
-                    assert w in bidomain.right
-                    if len(bidomain.right - self.pruned_actions.l2r[v]) == 0:
+    def prune_action(self, v, w, remove_nodes=None):
+        if opt.scalable:
+            self.pruned_actions.add_lr(v, w)
+            if remove_nodes:
+                for bidomain in self.bidomains:
+                    if v in bidomain.left:
+                        assert w in bidomain.right
+                        if len(bidomain.right - self.pruned_actions.l2r[v]) == 0:
+                            self.exhausted_v.add(v)
+                            self.recompute = True
+                        if len(bidomain.left - self.pruned_actions.r2l[w]) == 0:
+                            self.exhausted_w.add(w)
+                            self.recompute = True
+        else:
+            self.pruned_actions.add_lr(v, w)
+            # if remove_nodes:
+            for bd in unroll_bidomains(self.natts2bds):
+                if v in bd.left:
+                    assert w in bd.right
+                    if len(bd.right - self.pruned_actions.l2r[v]) == 0:
                         self.exhausted_v.add(v)
                         self.recompute = True
-                    if len(bidomain.left - self.pruned_actions.r2l[w]) == 0:
+                    if len(bd.left - self.pruned_actions.r2l[w]) == 0:
                         self.exhausted_w.add(w)
                         self.recompute = True
+
+            for g2nids in self.natts2g2nids.values():
+                if len(g2nids['g2'] - self.pruned_actions.l2r[v]) == 0:
+                    self.exhausted_v.add(v)
+                    self.recompute = True
+                if len(g2nids['g1'] - self.pruned_actions.r2l[w]) == 0:
+                    self.exhausted_w.add(w)
+                    self.recompute = True
 
     def get_unexhausted_bidomains(self):
         bds_unexhausted = []
@@ -336,7 +336,7 @@ class StateNode(object):
             if len(bd.left.intersection(self.exhausted_v)) > 0 or \
                     len(bd.right.intersection(self.exhausted_w)) > 0:
                 # form new bidomain excluding exhausted nodes
-                bd_unexhausted = Bidomain(None, None, None)
+                bd_unexhausted = Bidomain(None, None, None, None)
                 bd_unexhausted.left = bd.left - self.exhausted_v
                 bd_unexhausted.right = bd.right - self.exhausted_w
                 bd_unexhausted.is_adj = bd.is_adj

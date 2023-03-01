@@ -2,14 +2,14 @@ from models.base_model import BaseModel
 from torch.nn import ModuleList
 from models.mcs_rl_backtrack import MCSplitRLBacktrack
 from models.mcs_rl_backtrack_scalable import MCSplitRLBacktrackScalable
-from utils.options import extract_layer_info, get_option_value, parse_bool
+from utils.options import extract_layer_info, get_option_value
 from options import opt
-import time
+from time import time
 
 class GLSearch(BaseModel):
     def __init__(self, num_node_feat, feat_map, tot_num_train_pairs):
         super(GLSearch, self).__init__()
-        self.scalable = parse_bool(opt.scalable
+        self.scalable = opt.scalable
         self.num_node_feat = num_node_feat
         self.feat_map = feat_map
         self.tot_num_train_pairs = tot_num_train_pairs

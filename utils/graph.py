@@ -1,9 +1,10 @@
 from collections import defaultdict
 from torch_geometric.utils import to_undirected
 import torch
+from options import opt
 
-def create_edge_index(g, device):
-    edge_index = torch.tensor(list(g.edges), device=device).t().contiguous()
+def create_edge_index(g):
+    edge_index = torch.tensor(list(g.edges), device=opt.device).t().contiguous()
     edge_index = to_undirected(edge_index, num_nodes=g.number_of_nodes())
     return edge_index
 

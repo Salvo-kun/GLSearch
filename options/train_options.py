@@ -11,12 +11,10 @@ class TrainOptions(BaseOptions):
         
         self.opt.phase = 'train'
         self.opt.scalable = null_coalescence(self.opt.scalable, True)
+        self.opt.num_nodes_degree_max = null_coalescence(self.opt.num_nodes_degree_max, 20*self.opt.num_bds_max)
 
         if self.opt.load_model:
            self.opt.recursion_threshold = null_coalescence(self.opt.recursion_threshold, -1)
-                    
-        if len(self.opt.dataset_list) != 1:
-            self.opt.num_nodes_degree_max = null_coalescence(self.opt.num_nodes_degree_max, 20*self.opt.num_bds_max)
             
         if len(self.opt.dataset_list) == 1:
             self.opt.total_runtime = null_coalescence(self.opt.total_runtime, 360)

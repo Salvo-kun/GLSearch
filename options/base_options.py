@@ -15,24 +15,24 @@ class BaseOptions():
               ('syn:np_tr=20,np_te=20,nn_core=-1,nn_tot=14,ed=0.14,gen_type=ER', -1),
               ('syn:np_tr=20,np_te=20,nn_core=-1,nn_tot=18,ed=0.2|2,gen_type=WS', -1),
               ], 2500),
-            ([('ptc', 30),
-              # ('imdbmulti', 30),
-              ('syn:np_tr=20,np_te=20,nn_core=-1,nn_tot=32,ed=4,gen_type=BA', -1),
-              ('syn:np_tr=20,np_te=20,nn_core=-1,nn_tot=30,ed=0.12,gen_type=ER', -1),
-              ('syn:np_tr=20,np_te=20,nn_core=-1,nn_tot=34,ed=0.2|2,gen_type=WS', -1),
-              ], 2500),
-            ([('mutag', 30),
-              ('redditmulti10k', 30),
-              ('syn:np_tr=20,np_te=20,nn_core=-1,nn_tot=48,ed=4,gen_type=BA', -1),
-              ('syn:np_tr=20,np_te=20,nn_core=-1,nn_tot=46,ed=0.1,gen_type=ER', -1),
-              ('syn:np_tr=20,np_te=20,nn_core=-1,nn_tot=50,ed=0.2|4,gen_type=WS', -1),
-              ], 2500),
-            ([('webeasy', 30),
-              # ('mcsplain-connected', 30),
-              ('syn:np_tr=20,np_te=20,nn_core=-1,nn_tot=64,ed=3,gen_type=BA', -1),
-              ('syn:np_tr=20,np_te=20,nn_core=-1,nn_tot=62,ed=0.08,gen_type=ER', -1),
-              ('syn:np_tr=20,np_te=20,nn_core=-1,nn_tot=66,ed=0.2|4,gen_type=WS', -1),
-              ], 2500)
+            # ([('ptc', 30),
+            #   # ('imdbmulti', 30),
+            #   ('syn:np_tr=20,np_te=20,nn_core=-1,nn_tot=32,ed=4,gen_type=BA', -1),
+            #   ('syn:np_tr=20,np_te=20,nn_core=-1,nn_tot=30,ed=0.12,gen_type=ER', -1),
+            #   ('syn:np_tr=20,np_te=20,nn_core=-1,nn_tot=34,ed=0.2|2,gen_type=WS', -1),
+            #   ], 2500),
+            # ([('mutag', 30),
+            #   ('redditmulti10k', 30),
+            #   ('syn:np_tr=20,np_te=20,nn_core=-1,nn_tot=48,ed=4,gen_type=BA', -1),
+            #   ('syn:np_tr=20,np_te=20,nn_core=-1,nn_tot=46,ed=0.1,gen_type=ER', -1),
+            #   ('syn:np_tr=20,np_te=20,nn_core=-1,nn_tot=50,ed=0.2|4,gen_type=WS', -1),
+            #   ], 2500),
+            # ([('webeasy', 30),
+            #   # ('mcsplain-connected', 30),
+            #   ('syn:np_tr=20,np_te=20,nn_core=-1,nn_tot=64,ed=3,gen_type=BA', -1),
+            #   ('syn:np_tr=20,np_te=20,nn_core=-1,nn_tot=62,ed=0.08,gen_type=ER', -1),
+            #   ('syn:np_tr=20,np_te=20,nn_core=-1,nn_tot=66,ed=0.2|4,gen_type=WS', -1),
+            #   ], 2500)
         ]
         
         layer_1 = 'MCSRL_backtrack:Q_sampling=canonical_0.000016_0.16_0.01,DQN_mode=tgt_q_network,Q_BD=True,loss_fun=mse,q_signal=fitted-tgt-random-path,sync_target_frames=100,beta_reward=0,perc_IL=-1,buffer_start_iter=11,buffer_size=1024,sample_size=32,sample_all_edges=False,sample_all_edges_thresh=-1,eps_testing=False,recursion_threshold=-1,total_runtime=-1,save_every_recursion_count=-1,save_every_runtime=-1,mcsplit_heuristic_on_iter_one=False,restore_bidomains=False,no_pruning=False,regret_iters=3,populate_reply_buffer_every_iter=-1,encoder_type=abcd,embedder_type=abcd,interact_type=dvn,n_dim=64,n_layers=3,GNN_mode=GAT,learn_embs=True,layer_AGG_w_MLP=True,Q_mode=8,Q_act=elu+1,disentangle_search_tree=False,mcsp_before_perc=0.1' 
@@ -42,8 +42,6 @@ class BaseOptions():
         self.parser.add_argument('--dataset_list', type=list, default=dataset_list, help='list of datasets to train on')
         self.parser.add_argument('--shuffle_input', type=bool, default=False, help='')
         self.parser.add_argument('--batch_size', type=int, default=1, help='')        
-        self.parser.add_argument('--node_fe_1', type=str, default='one_hot', help='first node feature encoder')
-        self.parser.add_argument('--node_fe_2', type=str, default='local_degree_profile', help='second node feature encoder')
         self.parser.add_argument('--model', default='MCSRL_backtrack')
         self.parser.add_argument('--dataset', default='cocktail')
         self.parser.add_argument('--load_model', default=None)
@@ -88,11 +86,8 @@ class BaseOptions():
         self.parser.add_argument('--recursion_threshold', type=int, default=None)
         self.parser.add_argument('--total_runtime', type=int, default=None)
         self.parser.add_argument('--num_nodes_degree_max', type=int, default=None)
-        # self.parser.add_argument('--align_metric', default=align_metric) # TODO
         self.parser.add_argument('--reward_calculator_mode', default='vanilla')
-        # self.parser.add_argument('--node_feats_for_mcs', default=natts_mcs)  # TODO
-        # self.parser.add_argument('--node_feats', default=format_str_list([]))  # for one-hot encoding
-        # self.parser.add_argument('--tvt_options', default=format_str_list(tvt_options)) # TODO
+        self.parser.add_argument('--node_feats_for_mcs', default=['type']) 
         self.parser.add_argument('--tvt_strategy', default='holdout')
         self.parser.add_argument('--train_test_ratio', type=float, default=0.8)
         self.parser.add_argument('--lr', type=float, default=1e-4)
@@ -119,13 +114,13 @@ class BaseOptions():
         if self.opt.load_model:
             self.opt.supervised_before = null_coalescence(self.opt.supervised_before, -1) 
             self.opt.imitation_before = null_coalescence(self.opt.imitation_before, -1) 
-            self.val_every_iter = null_coalescence(self.opt.val_every_iter, 1)
-            self.retain_graph = null_coalescence(self.opt.retain_graph, False)
+            self.opt.val_every_iter = null_coalescence(self.opt.val_every_iter, 1)
+            self.opt.retain_graph = null_coalescence(self.opt.retain_graph, False)
         else:
             self.opt.supervised_before = null_coalescence(self.opt.supervised_before, 1250)
             self.opt.imitation_before = null_coalescence(self.opt.imitation_before, 3750)
-            self.val_every_iter = null_coalescence(self.opt.val_every_iter, 100)
-            self.retain_graph = null_coalescence(self.opt.retain_graph, True)
+            self.opt.val_every_iter = null_coalescence(self.opt.val_every_iter, 100)
+            self.opt.retain_graph = null_coalescence(self.opt.retain_graph, True)
             self.opt.recursion_threshold = null_coalescence(self.opt.recursion_threshold, 80)            
             
         self.opt.node_ordering = null_coalescence(self.opt.node_ordering, None if 'syn' in self.opt.dataset or 'pdb' in self.opt.dataset else 'bfs')

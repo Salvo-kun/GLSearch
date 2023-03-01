@@ -1,6 +1,3 @@
-from copy import deepcopy
-
-
 def extract_layer_info(layer_options):
     layer_info = {}
     

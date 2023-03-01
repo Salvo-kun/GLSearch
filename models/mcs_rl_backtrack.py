@@ -111,7 +111,7 @@ class MCSplitRLBacktrack(BaseModel):
         self.dqn, self.dqn_tgt = [Q_network_v1(self.encoder_type, self.embedder_type, self.interact_type, self.in_dim, self.n_dim, self.n_layers, self.GNN_mode, self.learn_embs, self.layer_AGG_w_MLP, self.Q_mode, self.Q_act, self.reward_calculator, self._environment)] * 2        
         self.forward_config_dict = self.get_forward_config_dict(self.restore_bidomains, self.total_runtime, self.recursion_threshold, self.q_signal)
         self.method_config_dict = self.get_method_config_dict(self.DQN_mode, self.regret_iters)
-        self.time_analysis = parse_bool(opt.time_analysis)
+        self.time_analysis = opt.time_analysis
         self.timer = OurTimer() if self.time_analysis else None
         self.val_every_iter, self.supervised_before, self.imitation_before = opt.val_every_iter, opt.supervised_before, opt.imitation_before
         self.a2c_networks = opt.a2c_networks
@@ -413,7 +413,7 @@ class MCSplitRLBacktrack(BaseModel):
                 right_domain = self._filter_topk_nodes_by_degree(bd.right, num_nodes_per_bd, state.g2)
             else:
                 right_domain = bd.right
-            bds_pruned.append(Bidomain(left_domain, right_domain, bd.is_adj))
+            bds_pruned.append(Bidomain(left_domain, right_domain, bd.is_adj, None))
             bdids_pruned.append(bdid)
         return bds_pruned, bdids_pruned
 
@@ -811,7 +811,7 @@ class MCSplitRLBacktrack(BaseModel):
             for v in range(g1.number_of_nodes()):
                 key = tuple([g1.nodes[v][natt] for natt in natts])
                 if key not in natts2bd:
-                    natts2bd[key] = Bidomain({v}, set(), False)
+                    natts2bd[key] = Bidomain({v}, set(), False, None)
                 else:
                     natts2bd[key].left.add(v)
 
@@ -822,7 +822,7 @@ class MCSplitRLBacktrack(BaseModel):
             for w in range(g2.number_of_nodes()):
                 key = tuple([g2.nodes[w][natt] for natt in natts])
                 if key not in natts2bd:
-                    natts2bd[key] = Bidomain(set(), {w}, False)
+                    natts2bd[key] = Bidomain(set(), {w}, False, None)
                 else:
                     natts2bd[key].right.add(w)
 
@@ -866,9 +866,9 @@ class MCSplitRLBacktrack(BaseModel):
                                          f' {len(nn_map_keys)} {len(bd_left_disconnected)} '
                                          f' {bidomain.is_adj}')
 
-                bidomain_connected = Bidomain(bd_left_connected, bd_right_connected, True)
+                bidomain_connected = Bidomain(bd_left_connected, bd_right_connected, True, None)
                 bidomain_disconnected = Bidomain(bd_left_disconnected, bd_right_disconnected,
-                                                 bidomain.is_adj)
+                                                 bidomain.is_adj, None)
 
                 if self.time_analysis:
                     timer.time_and_clear(f'_{k} update_bidomains Bidomain()')

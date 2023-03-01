@@ -118,7 +118,7 @@ class MCSplitRLBacktrackScalable(BaseModel):
         self.dqn, self.dqn_tgt = [Q_network_v1(self.encoder_type, self.embedder_type, self.interact_type, self.in_dim, self.n_dim, self.n_layers, self.GNN_mode, self.learn_embs, self.layer_AGG_w_MLP, self.Q_mode, self.Q_act, self.reward_calculator, self._environment)] * 2        
         self.forward_config_dict = self.get_forward_config_dict(self.restore_bidomains, self.total_runtime, self.recursion_threshold, self.q_signal)
         self.method_config_dict = self.get_method_config_dict(self.DQN_mode, self.regret_iters)
-        self.time_analysis = parse_bool(opt.time_analysis)
+        self.time_analysis = opt.time_analysis
         self.timer = OurTimer() if self.time_analysis else None
         self.val_every_iter, self.supervised_before, self.imitation_before = opt.val_every_iter, opt.supervised_before, opt.imitation_before
         self.a2c_networks = opt.a2c_networks
@@ -164,7 +164,7 @@ class MCSplitRLBacktrackScalable(BaseModel):
                 buffer_entry_list = self.search_tree2buffer_entry_list(search_tree, pair)
                 self.buffer.extend(buffer_entry_list)
 
-    def _forward_single_tree(self, forward_mode, cur_id, pair, state_init):
+    def _forward_single_tree(self, state_init):
         # initializations
         search_stack = StackHeap()
         search_stack.add(state_init, 0)
@@ -218,10 +218,7 @@ class MCSplitRLBacktrackScalable(BaseModel):
                 else:
                     continue
 
-            action_edge, next_state, promise_tuple, q_pred = self._forward_single_edge(
-                cur_state, action_space_data,
-                pair, recursion_count,
-                search_tree)
+            action_edge, next_state, promise_tuple, q_pred = self._forward_single_edge(cur_state, action_space_data, recursion_count)
 
             if opt.time_analysis:
                 self.timer.time_and_clear(f'recursion {recursion_count} _forward_single_edge')
@@ -245,13 +242,11 @@ class MCSplitRLBacktrackScalable(BaseModel):
         incumbent_list.append(
             [incumbent, recursion_count, timer.get_duration()])
 
-        self.post_process(
-            forward_mode, cur_id, search_tree, pair,
-            incumbent, incumbent_list, timer)
+        self.post_process(search_tree, incumbent_list)
 
         return search_tree, incumbent
 
-    def _forward_single_edge(self, state, action_space_data, pair, recursion_count, search_tree):
+    def _forward_single_edge(self, state, action_space_data, recursion_count):
 
         # estimate the q values
         if 'fixedv' in self.DQN_mode:
@@ -264,7 +259,7 @@ class MCSplitRLBacktrackScalable(BaseModel):
             q_vec, q_vec_idx, is_q_vec_idx_argmax = \
                 self.get_mcsp_promise2q_vec(promise)
         else:
-            q_vec = self.compute_q_vec(state, action_space_data, recursion_count).detach()
+            q_vec = self.compute_q_vec(state, action_space_data).detach()
 
             assert q_vec.size(0) == len(action_space_data.action_space[0]) == len(
                 action_space_data.action_space[1])
@@ -496,7 +491,7 @@ class MCSplitRLBacktrackScalable(BaseModel):
                 right_domain = bd.right
 
             if prune_flag_l or prune_flag_r:
-                bds_pruned.append(Bidomain(left_domain, right_domain, bd.natts, bd.bid))
+                bds_pruned.append(Bidomain(left_domain, right_domain, None, bd.natts, bd.bid))
             else:
                 bds_pruned.append(bd)
         return bds_pruned
@@ -679,15 +674,11 @@ class MCSplitRLBacktrackScalable(BaseModel):
         bnb_condition = len(cur_state.nn_map) + bound <= len(incumbent)
         return empty_action_space or ((not self.no_pruning) and bnb_condition), search_stack
 
-    def post_process(self, forward_mode, cur_id, search_tree, pair, incumbent, incumbent_list,
-                     timer):
-        g1, g2 = pair.g1.get_nxgraph(), pair.g2.get_nxgraph()
+    def post_process(self, search_tree, incumbent_list):
         search_tree.assign_v_search_tree(self.reward_calculator.discount)
         if not self.training and opt.load_model is not None:
             incumbent_end, recursion_iter_end, time_end = incumbent_list[-1]
             saver.log_info('=========================')
-            saver.log_info(f'{forward_mode}')
-            saver.log_info(f'curriculum {cur_id}: pair {g1.graph["gid"]},{g2.graph["gid"]}')
             saver.log_info(f'length of largest incumbent: {len(incumbent_end)}')
             saver.log_info(f'iteration at end: {recursion_iter_end}')
             saver.log_info(f'time at end: {time_end}')
@@ -919,7 +910,7 @@ class MCSplitRLBacktrackScalable(BaseModel):
         reward = self.reward_calculator.compute_reward(v, w, g1, g2, state, next_state)
 
         action_edge = ActionEdge(
-            action, reward,
+            action, None, reward,
             deepcopy(pruned_actions),
             deepcopy(exhausted_v),
             deepcopy(exhausted_w))
@@ -1009,10 +1000,10 @@ class MCSplitRLBacktrackScalable(BaseModel):
                 left_0, right_0 = left - Ni_g1 - {u}, right - Ni_g2 - {v}
                 if len(left_1) > 0 and len(right_1) > 0:
                     natts2bds_new[natts].append(
-                        Bidomain(left_1, right_1, natts))
+                        Bidomain(left_1, right_1, None, natts))
                 if len(left_0) > 0 and len(right_0) > 0:
                     natts2bds_new[natts].append(
-                        Bidomain(left_0, right_0, natts))
+                        Bidomain(left_0, right_0, None, natts))
 
                 # remaining nodes will not belong to any adjacent bidomain!
                 # => partition from unadjacent bidomain
@@ -1031,7 +1022,7 @@ class MCSplitRLBacktrackScalable(BaseModel):
             right_1_natts = N_g2.intersection(nid_natts_all_g2) - {v} - nn_map_neighbors['g2']
             if len(left_1_natts) > 0 and len(right_1_natts) > 0:
                 natts2bds_new[natts].append(
-                    Bidomain(left_1_natts, right_1_natts, natts))
+                    Bidomain(left_1_natts, right_1_natts, None, natts))
         return natts2bds_new, nn_map_neighbors_new
 
     def find_promise(self, next_state, action_space_data):

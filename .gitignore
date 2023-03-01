@@ -1,4 +1,7 @@
 .venv/
 __pycache__
 logs/
-data/dataset_files
+.idea
+data/klepto_files
+data/dataset_files/*
+options/debug_options.py

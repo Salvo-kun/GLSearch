@@ -48,3 +48,7 @@ class DebugOptions:
         self.plot_final_tree = 'True'
         self.randQ = ' False'
         self.node_feats_for_mcs = ['type']
+        self.shuffle_input = False
+        # feature encoders
+        self.node_fe_1 = 'one_hot'
+        self.node_fe_2 = 'local_degree_profile'

@@ -21,8 +21,9 @@ def train():
         num_iters_total_limit += opt.dataset_list[curriculum_id][1]
         data_loader = DataLoader(curriculum_dataset, batch_size=opt.batch_size, shuffle=opt.shuffle_input)
         num_iters = 0
+        total_loss = 0.0
 
-        for iter, data in enumerate(data_loader):
+        for data in data_loader:
             if num_iters == opt.only_iters_for_debug or (num_iters_total_limit and num_iters_total == num_iters_total_limit):
                 return
 
@@ -30,17 +31,17 @@ def train():
             
             model.train()
             model.zero_grad()
-            loss = model(curriculum_id, iter, batch_data)
-
-            if opt.retain_graph:
-                loss.backward(retain_graph=True)
-            else:
-                loss.backward()
+            loss = model(curriculum_id, num_iters_total, batch_data)
+            
+            if loss is not None:
+                if opt.retain_graph:
+                    loss.backward(retain_graph=True)
+                else:
+                    loss.backward()
+                    
+                optimizer.step()
                 
-            optimizer.step()
-
-            loss = loss.item() if loss is not None else 0.0
-            total_loss += loss
+            total_loss += loss.item() if loss is not None else 0.0
             num_iters += 1
             num_iters_total += 1
 

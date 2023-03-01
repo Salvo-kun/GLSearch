@@ -406,6 +406,7 @@ class MCSplitRLBacktrackScalable(BaseModel):
             increase_degree = int(min(1, num_nodes_degree * 1.4142135623))
             increase_dqn = int(min(1, num_nodes_dqn * 1.4142135623))
             action_space = [[], [], []]
+
             while (len(action_space[0]) == 0):  # TODO: make this more efficient
                 num_nodes_degree += increase_degree
                 num_nodes_dqn += increase_dqn
@@ -417,7 +418,7 @@ class MCSplitRLBacktrackScalable(BaseModel):
                 # prune top(L1/#bidomains) nodes
                 bds_pruned = \
                     self._prune_topk_nodes(bds_pruned, num_nodes_degree, state, 'deg')
-
+                    
                 natts2bds_pruned = defaultdict(list)
                 for bd in bds_pruned:
                     natts2bds_pruned[bd.natts].append(bd)
@@ -515,8 +516,7 @@ class MCSplitRLBacktrackScalable(BaseModel):
                 for w in bd.right:
                     # bds only contain unexhausted nodes NOT unexhausted edges
                     #   -> MUST check here to ensure nodes aren't revisited!
-                    if v in state.pruned_actions.l2r and \
-                            w in state.pruned_actions.l2r[v]:
+                    if v in state.pruned_actions.l2r and w in state.pruned_actions.l2r[v]:
                         continue
                     left_indices.append(v)
                     right_indices.append(w)
@@ -1036,7 +1036,7 @@ class MCSplitRLBacktrackScalable(BaseModel):
         return promise_tuple
 
     def get_is_mcsp(self):
-        return self.DQN_mode in ['mcsp_degree', 'fixedv_mcspv2', 'fixedv_mcsprl']
+        return self.DQN_mode in ['fixedv_mcsp', 'fixedv_mcsprl']
 
     ##########################################################
     # Loss Function

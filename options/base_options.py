@@ -16,7 +16,7 @@ class BaseOptions():
               ('syn:np_tr=20,np_te=20,nn_core=-1,nn_tot=18,ed=0.2|2,gen_type=WS', -1),
               ], 2500),
             ([('ptc', 30),
-              ('imdbmulti', 30),
+              # ('imdbmulti', 30),
               ('syn:np_tr=20,np_te=20,nn_core=-1,nn_tot=32,ed=4,gen_type=BA', -1),
               ('syn:np_tr=20,np_te=20,nn_core=-1,nn_tot=30,ed=0.12,gen_type=ER', -1),
               ('syn:np_tr=20,np_te=20,nn_core=-1,nn_tot=34,ed=0.2|2,gen_type=WS', -1),
@@ -28,7 +28,7 @@ class BaseOptions():
               ('syn:np_tr=20,np_te=20,nn_core=-1,nn_tot=50,ed=0.2|4,gen_type=WS', -1),
               ], 2500),
             ([('webeasy', 30),
-              ('mcsplain-connected', 30),
+              # ('mcsplain-connected', 30),
               ('syn:np_tr=20,np_te=20,nn_core=-1,nn_tot=64,ed=3,gen_type=BA', -1),
               ('syn:np_tr=20,np_te=20,nn_core=-1,nn_tot=62,ed=0.08,gen_type=ER', -1),
               ('syn:np_tr=20,np_te=20,nn_core=-1,nn_tot=66,ed=0.2|4,gen_type=WS', -1),
@@ -84,7 +84,7 @@ class BaseOptions():
         self.parser.add_argument('--val_method_list', default=['dqn'])#,'mcspv2','mcsprl'])
         self.parser.add_argument('--use_mcsp_policy', type=bool, default=False)
         self.parser.add_argument('--layer_num', type=int, default=1) 
-        self.parser.add_argument('--layer_1', type=int, default=layer_1)
+        self.parser.add_argument('--layer_1', type=str, default=layer_1)
         self.parser.add_argument('--recursion_threshold', type=int, default=None)
         self.parser.add_argument('--total_runtime', type=int, default=None)
         self.parser.add_argument('--num_nodes_degree_max', type=int, default=None)

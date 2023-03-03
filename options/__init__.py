@@ -31,7 +31,13 @@ if opt is None:
 # initialize logger
 log_format = '%(levelname)s | %(asctime)s | %(filename)s line:%(lineno)d | %(message)s'
 dateformat = '%H:%M:%S'
-colored_format = ColoredFormatter("%(log_color)s" + log_format + "%(reset)s",dateformat)
+colored_format = ColoredFormatter("%(log_color)s" + log_format + "%(reset)s",datefmt=dateformat,log_colors={
+		'DEBUG':    'cyan',
+		'INFO':     'white',
+		'WARNING':  'yellow',
+		'ERROR':    'red',
+		'CRITICAL': 'red,bg_white',
+	},)
 
 
 handlers = []

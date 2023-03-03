@@ -4,8 +4,6 @@ from data import BatchData, load_dataset_list
 import logging
 
 def train():
-    logging.warning("ciao")
-    logging.error("ciao")
     datasets = load_dataset_list(opt.dataset_list)
     for cur_dataset in datasets:
         logging.info(str(cur_dataset))

@@ -7,6 +7,7 @@ import random
 import pickle
 from .curriculum_dataset import CurriculumDataset
 from options import opt
+import logging
 
 
 def load_dataset_list(dataset_list: List[Tuple[List[Tuple[str, int]]]] or str) -> List[CurriculumDataset]:
@@ -48,7 +49,7 @@ def load_single_dataset(dataset_name: str) -> CurriculumDataset:
         raise ValueError('No file found for dataset {}'.format(dataset_name))
 
     path = os.path.join(opt.data_folder, full_name)
-    print('Loading data from {}'.format(path))
+    logging.info('Loading data from {}'.format(path))
 
     with open(path, 'rb') as f:
         json_data = pickle.load(f)

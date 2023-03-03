@@ -6,6 +6,7 @@ from .base_dataset import BaseDataset
 from .src.containers import Dataset, Graph, GraphPair
 from options import opt
 from utils.stats import generate_stat_line
+import logging
 
 seed = random.Random(123)
 
@@ -55,6 +56,7 @@ class CurriculumDataset(BaseDataset):
         num_node_feat = dataset_list[0].num_node_features
         gid1gid2_list = torch.tensor(list(pairs_cum.keys()), device=opt.device)
         dataset = Dataset(name, gs_cum, pairs_cum)
+        logging.info('Merged curriculum dataset: %s',name)
         return CurriculumDataset(dataset, gid1gid2_list, num_node_feat)
 
     def __str__(self):
@@ -134,5 +136,4 @@ def _merge_gs_and_pairs(gs_list: List[List[Graph]], pairs_list: List[PairDict]) 
     for gs, pairs in zip(gs_list, pairs_list):
         old_gid2new_gid, offset = _offset_graphs(gs_cum, gs, offset)
         _offset_pairs(pairs_cum, pairs, old_gid2new_gid)
-    print('merged dataset')
     return gs_cum, pairs_cum

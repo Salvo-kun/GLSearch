@@ -1,5 +1,7 @@
 import os
 import sys
+import logging
+from colorlog import ColoredFormatter
 
 # get name of caller (test, train or debug)
 caller = sys.argv[0].split(os.sep)[-1].split(".")[0]
@@ -19,7 +21,28 @@ elif caller == "test":
     opt = to.parse()
 elif caller == "debug":
     from .debug_options import DebugOptions
-    opt = DebugOptions()
+    do = DebugOptions()
+    do.initialize()
+    opt = do.parse()
 
 if opt is None:
     raise ValueError("opt is None. you should call this script from train.py, test.py or debug.py.")
+
+# initialize logger
+log_format = '%(levelname)s | %(asctime)s | %(filename)s line:%(lineno)d | %(message)s'
+dateformat = '%H:%M:%S'
+colored_format = ColoredFormatter("%(log_color)s" + log_format + "%(reset)s",dateformat)
+
+
+handlers = []
+if opt.log_file is not None:
+    handlers.append(logging.FileHandler(opt.log_file))
+if opt.log_stdout:
+    stream = logging.StreamHandler(sys.stdout)
+    stream.setFormatter(colored_format)
+    handlers.append(stream)
+logging.basicConfig(
+    level=opt.log_level.upper(),
+    format=log_format,
+    datefmt=dateformat,
+    handlers=handlers)

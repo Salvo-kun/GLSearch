@@ -4,7 +4,7 @@ import os
 class BaseOptions():
     opt = None
     def __init__(self):
-        self.parser = argparse.ArgumentParser()
+        self.parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
         self.initialized = False
 
     def initialize(self):

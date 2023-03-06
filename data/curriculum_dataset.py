@@ -78,7 +78,7 @@ def _get_filtered_pairs_and_gs_list(dataset_list: List[CurriculumDataset], num_p
 
 def _filter_pair_list(cur_dataset: CurriculumDataset, num_pairs: int) -> (PairDict, List[Graph]):
     """
-    Randomly select <num_pairs> pairs and  graphs from a singsle dataset
+    Randomly select <num_pairs> pairs and the relative graphs from a single dataset
     """
     for g in cur_dataset.dataset.graphs:
         g.graph['src'] = cur_dataset.dataset.name

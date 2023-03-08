@@ -22,8 +22,14 @@ class Graph(nx.Graph):
 
     def get_nxgraph(self):
         # FIXME deprecated
-        warnings.warn("Graph.get_nxgraph() is deprecated, use Graph directly instead", DeprecationWarning)
+        logging.warning("Graph.get_nxgraph() is deprecated, use Graph directly instead", DeprecationWarning)
         return self
+
+    def write_edgelist(self, filename:str):
+        with open(filename, 'w') as f:
+            print(f'{len(self.nodes)} {len(self.edges)}', file=f)
+            for e in self.edges:
+                print('{} {}'.format(e[0], e[1]), file=f)
 
 class HierarchicalGraph(Graph):
     def __init__(self):

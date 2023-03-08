@@ -14,11 +14,12 @@ class DebugOptionsObject:
         self.log_level = 'debug'
         self.log_file = None
         self.log_stdout = True
+        self.export_computed_pairs = True
 
         self.phase = 'train'
         self.device = 'cpu'
         self.data_folder = os.path.join("data", "dataset_files")
-        if True:
+        if False:
             self.dataset_list = [
             ([('aids700nef', 30),
               ('linux', 30),
@@ -45,9 +46,18 @@ class DebugOptionsObject:
               ('syn:np_tr=20,np_te=20,nn_core=-1,nn_tot=66,ed=0.2|4,gen_type=WS', -1),
               ], 2500)
         ]
-        else:
+        elif False:
             self.dataset_list = [
                 ([('duogexfroadNet-CA_rw_1957_1;roadNet-CA_rw_1957_2', 1)], 1),
+            ]
+        else:
+            self.dataset_list = [
+                ([#('webeasy', 30),
+                  ('mcsplain-connected', 30),
+                  ('syn:np_tr=20,np_te=20,nn_core=-1,nn_tot=64,ed=3,gen_type=BA', -1),
+                  ('syn:np_tr=20,np_te=20,nn_core=-1,nn_tot=62,ed=0.08,gen_type=ER', -1),
+                  ('syn:np_tr=20,np_te=20,nn_core=-1,nn_tot=66,ed=0.2|4,gen_type=WS', -1),
+                  ], 2500),
             ]
         self.shuffle_input = False
         self.batch_size = 1

@@ -7,6 +7,7 @@ from .src.containers import Dataset, Graph, GraphPair
 from options import opt
 from utils.stats import generate_stat_line
 import logging
+import os
 
 seed = random.Random(123)
 
@@ -29,6 +30,9 @@ class CurriculumDataset(BaseDataset):
         return len(self.gid1gid2_list)
 
     def __getitem__(self, index):
+        if opt.export_computed_pairs:
+            # Export the computed pairs to file
+            self.export_computed_pairs(index)
         return self.gid1gid2_list[index]
 
     @staticmethod
@@ -62,6 +66,31 @@ class CurriculumDataset(BaseDataset):
     def __str__(self):
         return self.dataset.__str__() + \
             generate_stat_line('Num node features', self.num_node_features)
+
+    def export_computed_pairs(self, index:int):
+        """
+        Export the <index>th pair of graphs to the folder graph_edgelists, as two txt files.
+        """
+        # fetch the graphs
+        g1_index = self.gid1gid2_list[index][0].item()
+        g2_index = self.gid1gid2_list[index][1].item()
+        g1 = self.dataset.graphs[g1_index]
+        g2 = self.dataset.graphs[g2_index]
+
+        # create the edgelist folder if it does not exist
+        edgelist_folder = os.path.join(".", "graph_edgelists")
+        if not os.path.exists(edgelist_folder):
+            os.makedirs(edgelist_folder)
+
+        # create one folder for each pair
+        folder = os.path.join(edgelist_folder, "pair_{}_graphs_{}_{}".format(index, g1.gid(), g2.gid()))
+        if not os.path.exists(folder):
+            os.makedirs(folder)
+        logging.debug("Exporting pair %d to folder %s", index, folder)
+
+        # write graphs to file
+        g1.write_edgelist(os.path.join(folder, "g1.txt"))
+        g2.write_edgelist(os.path.join(folder, "g2.txt"))
 
 
 def _get_filtered_pairs_and_gs_list(dataset_list: List[CurriculumDataset], num_pairs_list: List[int]) -> (
@@ -137,3 +166,5 @@ def _merge_gs_and_pairs(gs_list: List[List[Graph]], pairs_list: List[PairDict]) 
         old_gid2new_gid, offset = _offset_graphs(gs_cum, gs, offset)
         _offset_pairs(pairs_cum, pairs, old_gid2new_gid)
     return gs_cum, pairs_cum
+
+

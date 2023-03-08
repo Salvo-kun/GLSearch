@@ -15,6 +15,8 @@ class BaseOptions():
                                  help='Specify the file to log to. If not specified, the log will be saved to file.')
         self.parser.add_argument('--log_stdout','-ls', type=bool, default=True,
                                  help='Specify whether to log to stdout.')
+        self.parser.add_argument('--export_computed_pairs', '-ecp', type=bool, default=False,
+                                 help='If true, save the edge lists of all analyzed pairs to file')
 
     def parse(self):
         if not self.initialized:

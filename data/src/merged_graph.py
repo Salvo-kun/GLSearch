@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from options import opt
 from torch_geometric.data import Data as PyGSingleGraphData
 import torch
@@ -90,5 +92,5 @@ class MergedGraphData(PyGSingleGraphData):
 def __cumsum__(key, value):
     # FIXME __cumsum__ is deprecated in our torch version. Source code: https://github.com/JonasSchult/pytorch_geometric_fork/blob/4f655fbe5e79af274143fe8915b635397ffeca2a/torch_geometric/data/data.py#L30
     if bool(re.search('(index|face)', key)):
-        print("Warning: __cumsum__ is deprecated in our torch version. This code might not work as expected.")
+        logging.warning("Warning: __cumsum__ is deprecated in our torch version. This code might not work as expected.")
     return bool(re.search('(index|face)', key))

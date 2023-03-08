@@ -7,11 +7,12 @@ def train():
     datasets = load_dataset_list(opt.dataset_list)
     for cur_dataset in datasets:
         logging.info(str(cur_dataset))
-        """data_loader = DataLoader(cur_dataset, batch_size=opt.batch_size, shuffle=opt.shuffle_input)
+        data_loader = DataLoader(cur_dataset, batch_size=opt.batch_size, shuffle=opt.shuffle_input)
         for i, data in enumerate(data_loader):
             batch_data = BatchData(data, cur_dataset.dataset)
             print(str(batch_data))
-"""
+            break
+
 
 if __name__ == '__main__':
 

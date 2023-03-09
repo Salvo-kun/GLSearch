@@ -7,12 +7,11 @@ from options import opt
 from time import time
 
 class GLSearch(BaseModel):
-    def __init__(self, num_node_feat, feat_map, tot_num_train_pairs):
+    def __init__(self, num_node_feat, feat_map):
         super(GLSearch, self).__init__()
         self.scalable = opt.scalable
         self.num_node_feat = num_node_feat
         self.feat_map = feat_map
-        self.tot_num_train_pairs = tot_num_train_pairs
         self._init_layers()
 
     def forward(self, cur_id, iter, batch_data): # TODO: rewrite this in the classic way (just x passed)
@@ -43,7 +42,6 @@ class GLSearch(BaseModel):
             
             layer_info['in_dim'] = self.num_node_feat
             layer_info['feat_map'] = self.feat_map
-            layer_info['tot_num_train_pairs'] = self.tot_num_train_pairs
             
             layers.append(MCSplitRLBacktrackScalable(**layer_info) if self.scalable else MCSplitRLBacktrack(**layer_info))
             

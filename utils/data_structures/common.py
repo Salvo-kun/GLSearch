@@ -93,6 +93,9 @@ class DoubleDict():
 
     def __len__(self):
         return len(self.l2r)
+    
+    def __str__(self):
+        return f'l2r: {self.l2r} \t\t r2l: {self.r2l}'
 
     def add_lr(self, l, r):
         if l not in self.l2r:

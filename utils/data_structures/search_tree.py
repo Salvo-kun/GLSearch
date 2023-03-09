@@ -92,9 +92,9 @@ class StateNode(object):
     def __init__(self, ins_g1, ins_g2, nn_map, bidomains_or_nn_map_neighbors, 
                  abidomains_or_natts2bds, ubidomains_or_natts2g2nids,
                  edge_index1, edge_index2, adj_list1, adj_list2, g1, g2,
-                 degree_mat, sgw_mat, pca_mat, cur_id, mcsp_vec, MCS_size_UB,
-                 explore_n_pairs=None, pruned_actions=None, exhausted_v=None,
-                 exhausted_w=None, tree_depth=0, num_steps=0, cum_reward=0):
+                 cur_id, mcsp_vec, MCS_size_UB, explore_n_pairs=None, 
+                 pruned_actions=None, exhausted_v=None, exhausted_w=None, 
+                 tree_depth=0, num_steps=0, cum_reward=0):
         self.ins_g1 = ins_g1
         self.ins_g2 = ins_g2
         self.edge_index1 = edge_index1
@@ -103,9 +103,6 @@ class StateNode(object):
         self.adj_list2 = adj_list2
         self.g1 = g1
         self.g2 = g2
-        self.degree_mat = degree_mat
-        self.sgw_mat = sgw_mat
-        self.pca_mat = pca_mat
         self.x1 = None
         self.x2 = None
         self.nn_map = nn_map
@@ -296,7 +293,7 @@ class StateNode(object):
         return adjacent_bds, adjacent_bdids
 
     def prune_action(self, v, w, remove_nodes=None):
-        if opt.scalable:
+        if not opt.scalable:
             self.pruned_actions.add_lr(v, w)
             if remove_nodes:
                 for bidomain in self.bidomains:

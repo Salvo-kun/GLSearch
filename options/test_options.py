@@ -16,5 +16,7 @@ class TestOptions(BaseOptions):
                     
         if len(self.opt.dataset_list) == 1:
             self.opt.num_nodes_degree_max = null_coalescence(self.opt.num_nodes_degree_max, 3*self.opt.num_bds_max)
+        else:
+            self.opt.num_nodes_degree_max = null_coalescence(self.opt.num_nodes_degree_max, 20*self.opt.num_bds_max)
         
         return self.opt

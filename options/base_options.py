@@ -8,31 +8,41 @@ class BaseOptions():
         self.initialized = False
 
     def initialize(self):
+        # dataset_list = [
+        #     ([('aids700nef', 30),
+        #       ('linux', 30),
+        #       ('syn:np_tr=20,np_te=20,nn_core=-1,nn_tot=16,ed=5,gen_type=BA', -1),
+        #       ('syn:np_tr=20,np_te=20,nn_core=-1,nn_tot=14,ed=0.14,gen_type=ER', -1),
+        #       ('syn:np_tr=20,np_te=20,nn_core=-1,nn_tot=18,ed=0.2|2,gen_type=WS', -1),
+        #       ], 2500),
+        #     # ([('ptc', 30),
+        #     #   # ('imdbmulti', 30),
+        #     #   ('syn:np_tr=20,np_te=20,nn_core=-1,nn_tot=32,ed=4,gen_type=BA', -1),
+        #     #   ('syn:np_tr=20,np_te=20,nn_core=-1,nn_tot=30,ed=0.12,gen_type=ER', -1),
+        #     #   ('syn:np_tr=20,np_te=20,nn_core=-1,nn_tot=34,ed=0.2|2,gen_type=WS', -1),
+        #     #   ], 2500),
+        #     # ([('mutag', 30),
+        #     #   ('redditmulti10k', 30),
+        #     #   ('syn:np_tr=20,np_te=20,nn_core=-1,nn_tot=48,ed=4,gen_type=BA', -1),
+        #     #   ('syn:np_tr=20,np_te=20,nn_core=-1,nn_tot=46,ed=0.1,gen_type=ER', -1),
+        #     #   ('syn:np_tr=20,np_te=20,nn_core=-1,nn_tot=50,ed=0.2|4,gen_type=WS', -1),
+        #     #   ], 2500),
+        #     # ([('webeasy', 30),
+        #     #   # ('mcsplain-connected', 30),
+        #     #   ('syn:np_tr=20,np_te=20,nn_core=-1,nn_tot=64,ed=3,gen_type=BA', -1),
+        #     #   ('syn:np_tr=20,np_te=20,nn_core=-1,nn_tot=62,ed=0.08,gen_type=ER', -1),
+        #     #   ('syn:np_tr=20,np_te=20,nn_core=-1,nn_tot=66,ed=0.2|4,gen_type=WS', -1),
+        #     #   ], 2500)
+        # ]
+        
         dataset_list = [
-            ([('aids700nef', 30),
-              ('linux', 30),
-              ('syn:np_tr=20,np_te=20,nn_core=-1,nn_tot=16,ed=5,gen_type=BA', -1),
-              ('syn:np_tr=20,np_te=20,nn_core=-1,nn_tot=14,ed=0.14,gen_type=ER', -1),
-              ('syn:np_tr=20,np_te=20,nn_core=-1,nn_tot=18,ed=0.2|2,gen_type=WS', -1),
-              ], 2500),
-            # ([('ptc', 30),
-            #   # ('imdbmulti', 30),
-            #   ('syn:np_tr=20,np_te=20,nn_core=-1,nn_tot=32,ed=4,gen_type=BA', -1),
-            #   ('syn:np_tr=20,np_te=20,nn_core=-1,nn_tot=30,ed=0.12,gen_type=ER', -1),
-            #   ('syn:np_tr=20,np_te=20,nn_core=-1,nn_tot=34,ed=0.2|2,gen_type=WS', -1),
-            #   ], 2500),
-            # ([('mutag', 30),
-            #   ('redditmulti10k', 30),
-            #   ('syn:np_tr=20,np_te=20,nn_core=-1,nn_tot=48,ed=4,gen_type=BA', -1),
-            #   ('syn:np_tr=20,np_te=20,nn_core=-1,nn_tot=46,ed=0.1,gen_type=ER', -1),
-            #   ('syn:np_tr=20,np_te=20,nn_core=-1,nn_tot=50,ed=0.2|4,gen_type=WS', -1),
-            #   ], 2500),
-            # ([('webeasy', 30),
-            #   # ('mcsplain-connected', 30),
-            #   ('syn:np_tr=20,np_te=20,nn_core=-1,nn_tot=64,ed=3,gen_type=BA', -1),
-            #   ('syn:np_tr=20,np_te=20,nn_core=-1,nn_tot=62,ed=0.08,gen_type=ER', -1),
-            #   ('syn:np_tr=20,np_te=20,nn_core=-1,nn_tot=66,ed=0.2|4,gen_type=WS', -1),
-            #   ], 2500)
+            ([('duogexf::roadNet-CA_rw_1957_1;roadNet-CA_rw_1957_2', 1)], 1), 
+            ([('duogexf::DBP15K_en_zh_1_rw_1945_1;DBP15K_en_zh_1_rw_1945_2', 1)], 1), 
+            ([('duogexf::DBP15K_en_zh_2_rw_1907_1;DBP15K_en_zh_2_rw_1907_2', 1)], 1), 
+            ([('duogexf::DBP15K_en_zh_1_rw_1945_1;DBP15K_en_zh_2_rw_1907_1', 1)], 1), 
+            ([('duogexf::Email-Enron_rw_3369_1;Email-Enron_rw_3369_2', 1)], 1), 
+            ([('duogexf::Amazon_Computers_rw_3518_1;Amazon_Computers_rw_3518_2', 1)], 1), 
+            ([('duogexf::PP-Pathways_ppi_rw_2152_1;PP-Pathways_ppi_rw_2152_2', 1)], 1)
         ]
         
         layer_1 = 'MCSRL_backtrack:Q_sampling=canonical_0.000016_0.16_0.01,DQN_mode=tgt_q_network,Q_BD=True,loss_fun=mse,q_signal=fitted-tgt-random-path,sync_target_frames=100,beta_reward=0,perc_IL=-1,buffer_start_iter=11,buffer_size=1024,sample_size=32,sample_all_edges=False,sample_all_edges_thresh=-1,eps_testing=False,recursion_threshold=-1,total_runtime=-1,save_every_recursion_count=-1,save_every_runtime=-1,mcsplit_heuristic_on_iter_one=False,restore_bidomains=False,no_pruning=False,regret_iters=3,populate_reply_buffer_every_iter=-1,encoder_type=abcd,embedder_type=abcd,interact_type=dvn,n_dim=64,n_layers=3,GNN_mode=GAT,learn_embs=True,layer_AGG_w_MLP=True,Q_mode=8,Q_act=elu+1,disentangle_search_tree=False,mcsp_before_perc=0.1' 
@@ -60,7 +70,6 @@ class BaseOptions():
         self.parser.add_argument('--with_bdgnn', type=bool, default=False)
         self.parser.add_argument('--with_gnn_per_action', type=bool, default=False)
         self.parser.add_argument('--max_chunk_size', type=int, default=64)
-        self.parser.add_argument('--a2c_networks', type=bool, default=False)
         self.parser.add_argument('--interact_ops', default=['32', '1dconv+max_1', 'add'])
         self.parser.add_argument('--run_bds_MLP_before_interact', type=bool, default=False)
         self.parser.add_argument('--inverse_bd_size_order', type=bool, default=False)
@@ -87,7 +96,7 @@ class BaseOptions():
         self.parser.add_argument('--total_runtime', type=int, default=None)
         self.parser.add_argument('--num_nodes_degree_max', type=int, default=None)
         self.parser.add_argument('--reward_calculator_mode', default='vanilla')
-        self.parser.add_argument('--node_feats_for_mcs', default=['type']) 
+        self.parser.add_argument('--node_feats_for_mcs', default=None) 
         self.parser.add_argument('--tvt_strategy', default='holdout')
         self.parser.add_argument('--train_test_ratio', type=float, default=0.8)
         self.parser.add_argument('--lr', type=float, default=1e-4)
@@ -116,12 +125,15 @@ class BaseOptions():
             self.opt.imitation_before = null_coalescence(self.opt.imitation_before, -1) 
             self.opt.val_every_iter = null_coalescence(self.opt.val_every_iter, 1)
             self.opt.retain_graph = null_coalescence(self.opt.retain_graph, False)
+            self.opt.node_feats_for_mcs = null_coalescence(self.opt.node_feats_for_mcs, ['type'])
         else:
             self.opt.supervised_before = null_coalescence(self.opt.supervised_before, 1250)
             self.opt.imitation_before = null_coalescence(self.opt.imitation_before, 3750)
             self.opt.val_every_iter = null_coalescence(self.opt.val_every_iter, 100)
             self.opt.retain_graph = null_coalescence(self.opt.retain_graph, True)
-            self.opt.recursion_threshold = null_coalescence(self.opt.recursion_threshold, 80)            
+            self.opt.recursion_threshold = null_coalescence(self.opt.recursion_threshold, 80)     
+            self.opt.node_feats_for_mcs = null_coalescence(self.opt.node_feats_for_mcs, [])
+       
             
         self.opt.node_ordering = null_coalescence(self.opt.node_ordering, None if 'syn' in self.opt.dataset or 'pdb' in self.opt.dataset else 'bfs')
         self.opt.total_runtime = null_coalescence(self.opt.total_runtime, -1)

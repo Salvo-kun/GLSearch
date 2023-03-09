@@ -1,17 +1,19 @@
+import torch
 from options import opt
 from torch.utils.data import DataLoader
 from torch.optim import Adam
 from data import BatchData, load_dataset_list
 from models.gl_search import GLSearch
 
+torch.autograd.set_detect_anomaly(True)
+
 def train():
     datasets = load_dataset_list(opt.dataset_list)
     
     num_node_feat = datasets[0].num_node_features
     feat_map = {}
-    tot_num_train_pairs = sum([x.gid1gid2_list.shape[0] for x in datasets])
     
-    model = GLSearch(num_node_feat, feat_map, tot_num_train_pairs).to(opt.device)
+    model = GLSearch(num_node_feat, feat_map).to(opt.device)
     optimizer = Adam(model.parameters(), lr=opt.lr)
 
     num_iters_total = 0
@@ -28,6 +30,10 @@ def train():
                 return
 
             batch_data = BatchData(data, curriculum_dataset.dataset)
+            print(f'CID: {curriculum_id} \t Iter: {num_iters}')
+            # print(f'Indices: {batch_data.merge_data["ind_list"]}')
+            # print(f'Dataset: {curriculum_dataset.dataset}')
+            # print(f'Ins: {batch_data.merge_data["merge"].x}')
             
             model.train()
             model.zero_grad()

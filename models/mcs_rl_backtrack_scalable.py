@@ -1,3 +1,4 @@
+from __future__ import annotations
 from collections import defaultdict
 import random
 from torch.nn import MSELoss, BCEWithLogitsLoss
@@ -10,7 +11,8 @@ import torch
 from torch.nn.functional import softmax
 from utils.graph import create_edge_index, create_adj_set
 from utils.timer import OurTimer
-from utils.data_structures.search_tree import Bidomain, StateNode, ActionEdge, SearchTree, ActionSpaceDataScalable, unroll_bidomains, get_natts_hash, get_natts2g2abd_sg_nids
+from utils.data_structures.search_tree import Bidomain, StateNode, ActionEdge, SearchTree, ActionSpaceDataScalable, \
+    unroll_bidomains, get_natts_hash, get_natts2g2abd_sg_nids
 from utils.data_structures.buffer import BinBuffer
 from utils.data_structures.common import StackHeap, DoubleDict
 from utils.data_structures.dqn_input import DQNInput
@@ -18,7 +20,9 @@ from models.dqn import Q_network_v1
 from utils.reward_calculator import RewardCalculator
 from utils.saver import saver
 from options import opt
-from utils.mc_split import McspVec, BufferEntry, ForwardConfig, MethodConfig, IMITATION_MODE, PRETRAIN_MODE, TRAIN_MODE, TEST_MODE
+from utils.mc_split import McspVec, BufferEntry, ForwardConfig, MethodConfig, IMITATION_MODE, PRETRAIN_MODE, TRAIN_MODE, \
+    TEST_MODE
+
 
 #########################################################################
 # MCSRL Procedure
@@ -27,7 +31,7 @@ from utils.mc_split import McspVec, BufferEntry, ForwardConfig, MethodConfig, IM
 class MCSplitRLBacktrackScalable(BaseModel):
     def __init__(self, **kwargs):
         super(MCSplitRLBacktrackScalable, self).__init__()
-        
+
         self.DQN_mode = validate(kwargs['DQN_mode'], str)
         self.q_signal = validate(kwargs['q_signal'], str)
         self.recursion_threshold = validate(int(kwargs['recursion_threshold']), int, IS_POSITIVE, None)
@@ -35,7 +39,8 @@ class MCSplitRLBacktrackScalable(BaseModel):
         self.restore_bidomains = validate(parse_bool(kwargs['restore_bidomains']), bool)
         self.regret_iters = validate(int(kwargs['regret_iters']), int, IS_POSITIVE, None)
         self.buffer_size = validate(int(kwargs['buffer_size']), int, IS_POSITIVE)
-        self.global_loss_func = validate(opt.loss_func, str, lambda x: x in ['MSE', 'BCEWithLogits']) # TODO validate inside config
+        self.global_loss_func = validate(opt.loss_func, str,
+                                         lambda x: x in ['MSE', 'BCEWithLogits'])  # TODO validate inside config
         self.Q_sampling = validate(kwargs['Q_sampling'], str)
         self.feat_map = validate(kwargs['feat_map'], dict)
         self.sync_target_frames = validate(int(kwargs['sync_target_frames']), int, IS_POSITIVE)
@@ -43,22 +48,30 @@ class MCSplitRLBacktrackScalable(BaseModel):
         self.sample_size = validate(int(kwargs['sample_size']), int, IS_POSITIVE)
         self.loss_fun = validate(kwargs['loss_fun'], str)
         self.eps_testing = validate(parse_bool(kwargs['eps_testing']), bool)
-        self.Q_eps_dec_each_iter, self.Q_eps_start, self.Q_eps_end = tuple(validate(float(x), float, IS_BETWEEN_0_AND_1) for x in self.Q_sampling.split('_')[1:])
-        self.loss = MSELoss() if self.global_loss_func == 'MSE' else BCEWithLogitsLoss()   
+        self.Q_eps_dec_each_iter, self.Q_eps_start, self.Q_eps_end = tuple(
+            validate(float(x), float, IS_BETWEEN_0_AND_1) for x in self.Q_sampling.split('_')[1:])
+        self.loss = MSELoss() if self.global_loss_func == 'MSE' else BCEWithLogitsLoss()
         self.debug_first_train_iters = 50
         self.debug_train_iter_counter = 0
         self.seed = random.Random(123)
         self.train_counter = -1
-        self.sample_strat, self.biased = ('sg', 'full') if opt.smarter_bin_sampling else (('q_max', None) if opt.smart_bin_sampling else (None, 'biased'))
-        self.buffer = BinBuffer(self.buffer_size, sample_strat=self.sample_strat, biased=self.biased, no_trivial_pairs=opt.no_trivial_pairs)
+        self.sample_strat, self.biased = ('sg', 'full') if opt.smarter_bin_sampling else (
+            ('q_max', None) if opt.smart_bin_sampling else (None, 'biased'))
+        self.buffer = BinBuffer(self.buffer_size, sample_strat=self.sample_strat, biased=self.biased,
+                                no_trivial_pairs=opt.no_trivial_pairs)
         self.reward_calculator = RewardCalculator(opt.reward_calculator_mode, self.feat_map, self.calc_bound)
-        self.dqn, self.dqn_tgt = [Q_network_v1(kwargs['encoder_type'], kwargs['embedder_type'], kwargs['interact_type'], int(kwargs['in_dim']), int(kwargs['n_dim']), int(kwargs['n_layers']), kwargs['GNN_mode'], kwargs['learn_embs'], kwargs['layer_AGG_w_MLP'], kwargs['Q_mode'], kwargs['Q_act'], self.reward_calculator, self._environment)] * 2        
-        self.forward_config_dict = self.get_forward_config_dict(self.restore_bidomains, self.total_runtime, self.recursion_threshold, self.q_signal)
+        self.dqn, self.dqn_tgt = [Q_network_v1(kwargs['encoder_type'], kwargs['embedder_type'],
+                                               int(kwargs['in_dim']), int(kwargs['n_dim']), int(kwargs['n_layers']),
+                                               kwargs['GNN_mode'], eval(kwargs['learn_embs']), eval(kwargs['layer_AGG_w_MLP']),
+                                               int(kwargs['Q_mode']), kwargs['Q_act'], self.reward_calculator,
+                                               self._environment)]*2
+        self.forward_config_dict = self.get_forward_config_dict(self.restore_bidomains, self.total_runtime,
+                                                                self.recursion_threshold, self.q_signal)
         self.method_config_dict = self.get_method_config_dict(self.DQN_mode, self.regret_iters)
         self.time_analysis = opt.time_analysis
         self.timer = OurTimer() if self.time_analysis else None
         self.val_every_iter, self.supervised_before, self.imitation_before = opt.val_every_iter, opt.supervised_before, opt.imitation_before
-        
+
     #########################################################
     # Forward Procedure
     #########################################################
@@ -67,16 +80,17 @@ class MCSplitRLBacktrackScalable(BaseModel):
             self.timer.time_and_clear(f'forward iter {iter} start')
 
         forward_mode = self.get_forward_mode(iter)
-        self.apply_forward_config(self.forward_config_dict[forward_mode])            
-            
-        methods = opt.val_method_list if forward_mode == TEST_MODE else (['dqn'] if forward_mode == TRAIN_MODE else ['mcspv2'])
+        self.apply_forward_config(self.forward_config_dict[forward_mode])
+
+        methods = opt.val_method_list if forward_mode == TEST_MODE else (
+            ['dqn'] if forward_mode == TRAIN_MODE else ['mcspv2'])
         for method in methods:
             # run forward model
             self.apply_method_config(self.method_config_dict[method])
             pair_list, state_init_list = self._preprocess_forward(ins, batch_data, cur_id)
             self._forward_batch(pair_list, state_init_list)
-            
-        if forward_mode != TEST_MODE:    
+
+        if forward_mode != TEST_MODE:
             # run loss function
             self.apply_method_config(self.method_config_dict['dqn'])
             loss = self._loss_wrapper(forward_mode)
@@ -84,8 +98,8 @@ class MCSplitRLBacktrackScalable(BaseModel):
             if self._tgt_net_sync_itr():
                 self._sync_tgt_networks()
         else:
-            loss = None 
-        
+            loss = None
+
         return loss
 
     def _forward_batch(self, pair_list, state_init_list):
@@ -117,7 +131,7 @@ class MCSplitRLBacktrackScalable(BaseModel):
             saver.log_info('search starting!')
         while len(search_stack) != 0:
             recursion_count += 1
-            if recursion_count % 500 == 0 and opt.load_model is not None:
+            if recursion_count%500 == 0 and opt.load_model is not None:
                 saver.log_info(f'on iteration {recursion_count}:\t{len(incumbent)}')
 
             # pop from stack
@@ -152,7 +166,8 @@ class MCSplitRLBacktrackScalable(BaseModel):
                 else:
                     continue
 
-            action_edge, next_state, promise_tuple, q_pred = self._forward_single_edge(cur_state, action_space_data, recursion_count)
+            action_edge, next_state, promise_tuple, q_pred = self._forward_single_edge(cur_state, action_space_data,
+                                                                                       recursion_count)
 
             if opt.time_analysis:
                 self.timer.time_and_clear(f'recursion {recursion_count} _forward_single_edge')
@@ -241,12 +256,12 @@ class MCSplitRLBacktrackScalable(BaseModel):
                 min_lr = min(len(g2nids['g1']), len(g2nids['g2']))
             self.lgrade[v] += min_lr
             self.rgrade[w] += min_lr
-                
+
     #########################################################
     # Utility Functions
     #########################################################
     def get_forward_mode(self, iter):
-        if iter % self.val_every_iter == 0:
+        if iter%self.val_every_iter == 0:
             forward_mode = TEST_MODE
         else:
             self.train_counter += 1
@@ -256,7 +271,7 @@ class MCSplitRLBacktrackScalable(BaseModel):
                 forward_mode = IMITATION_MODE
             else:
                 forward_mode = TRAIN_MODE
-                
+
         return forward_mode
 
     def get_forward_config_dict(self, restore_bidomains, total_runtime, recursion_threshold, q_signal):
@@ -366,8 +381,8 @@ class MCSplitRLBacktrackScalable(BaseModel):
         else:
             num_bds, num_nodes_degree, num_nodes_dqn = \
                 self._get_prune_parameters(is_mcsp)
-            increase_degree = int(min(1, num_nodes_degree * 1.4142135623))
-            increase_dqn = int(min(1, num_nodes_dqn * 1.4142135623))
+            increase_degree = int(min(1, num_nodes_degree*1.4142135623))
+            increase_dqn = int(min(1, num_nodes_dqn*1.4142135623))
             action_space = [[], [], []]
 
             # print(f'Here I am {len(bidomains)} ismcsp {is_mcsp}: l ({[len(bd.left) for bd in bidomains]}) r ({[len(bd.right) for bd in bidomains]})')
@@ -385,7 +400,7 @@ class MCSplitRLBacktrackScalable(BaseModel):
                 # prune top(L1/#bidomains) nodes
                 bds_pruned = \
                     self._prune_topk_nodes(bds_pruned, num_nodes_degree, state, 'deg')
-                    
+
                 natts2bds_pruned = defaultdict(list)
                 for bd in bds_pruned:
                     natts2bds_pruned[bd.natts].append(bd)
@@ -434,7 +449,7 @@ class MCSplitRLBacktrackScalable(BaseModel):
 
     def _prune_topk_nodes(self, bidomains, num_nodes, state, method):
         # get L value (max number of nodes in each bidomain)
-        num_nodes_per_bd = num_nodes // len(bidomains)
+        num_nodes_per_bd = num_nodes//len(bidomains)
 
         # prune for topl nodes
         bds_pruned, bdids_pruned = [], []
@@ -519,8 +534,10 @@ class MCSplitRLBacktrackScalable(BaseModel):
         for pair in pair_list:
             # set up general input data
             g1, g2 = pair.g1, pair.g2  # Get graph from a pair
-            ins_g1, ins_g2, offset = self.compute_ins(g1, g2, ins, offset)  # Compute their tensors from the contiguous one (ins) and update offset
-            edge_index1, edge_index2 = create_edge_index(g1), create_edge_index(g2)  # Create indexes for the edges of each graph
+            ins_g1, ins_g2, offset = self.compute_ins(g1, g2, ins,
+                                                      offset)  # Compute their tensors from the contiguous one (ins) and update offset
+            edge_index1, edge_index2 = create_edge_index(g1), create_edge_index(
+                g2)  # Create indexes for the edges of each graph
             adj_list1, adj_list2 = create_adj_set(g1), create_adj_set(g2)  # Create adjacency matrix for each graph
             nn_map = {}
             nn_map_neighbors = {'g1': set(), 'g2': set()}
@@ -535,13 +552,14 @@ class MCSplitRLBacktrackScalable(BaseModel):
 
             natts2g2abd_sg_nids = get_natts2g2abd_sg_nids(natts2g2nids, natts2bds, nn_map)  # TODO: understand this
             ######################################
-            MCS_size_UB = self.calc_bound_helper(natts2bds, natts2g2nids, natts2g2abd_sg_nids)  # Calculate MCS upper bound
+            MCS_size_UB = self.calc_bound_helper(natts2bds, natts2g2nids,
+                                                 natts2g2abd_sg_nids)  # Calculate MCS upper bound
 
             # set up special input data
             mcsp_vec = None
             if self.DQN_mode in ['fixedv_mcsp', 'fixedv_mcsprl'] or opt.use_mcsp_policy:
                 mcsp_vec = self.get_mcsp_vec(g1, g2)  # Use MCS heuristic based on node's degree
-            assert self.DQN_mode not in ['pca', 'sgw', 'mcsp_degree'] # not supported
+            assert self.DQN_mode not in ['pca', 'sgw', 'mcsp_degree']  # not supported
 
             # create input data object
             torch.set_printoptions(profile="full")
@@ -565,12 +583,12 @@ class MCSplitRLBacktrackScalable(BaseModel):
 
     def compute_ins(self, g1, g2, ins, offset):
         M, N = g1.number_of_nodes(), g2.number_of_nodes()
-        ins_g1, ins_g2 =  ins[offset:offset + M], ins[offset + M:offset + N + M]
+        ins_g1, ins_g2 = ins[offset:offset + M], ins[offset + M:offset + N + M]
         offset += (N + M)  # used for grabbing the right input embeddings
         return ins_g1, ins_g2, offset
 
     def _tgt_net_sync_itr(self):
-        valid_iteration = self.train_counter % self.sync_target_frames == 0
+        valid_iteration = self.train_counter%self.sync_target_frames == 0
         return valid_iteration
 
     def _sync_tgt_networks(self):
@@ -579,11 +597,10 @@ class MCSplitRLBacktrackScalable(BaseModel):
     def get_mcsp_vec(self, g1, g2):
         deg_vec_g1 = np.array(list(g1.degree[j] for j in range(g1.number_of_nodes())))
         deg_vec_g2 = np.array(list(g2.degree[j] for j in range(g2.number_of_nodes())))
-        self.lgrade = deg_vec_g1 / (np.max(deg_vec_g1) + 2)
-        self.rgrade = deg_vec_g2 / (np.max(deg_vec_g2) + 2)
+        self.lgrade = deg_vec_g1/(np.max(deg_vec_g1) + 2)
+        self.rgrade = deg_vec_g2/(np.max(deg_vec_g2) + 2)
         mcsp_vec = McspVec(deg_vec_g1, deg_vec_g2)
         return mcsp_vec
-
 
     ##########################################################
     # Utility functions (forward single tree procedure)
@@ -618,7 +635,7 @@ class MCSplitRLBacktrackScalable(BaseModel):
     def exit_condition(self, recursion_count, timer, since_last_update_count):
         # exit search if recursion threshold
         recursion_thresh = (
-                                       self.recursion_threshold is not None) and recursion_count > self.recursion_threshold
+                                   self.recursion_threshold is not None) and recursion_count > self.recursion_threshold
         timout_thresh = self.total_runtime is not None and timer.get_duration() > self.total_runtime
         return recursion_thresh and timout_thresh
 
@@ -646,7 +663,8 @@ class MCSplitRLBacktrackScalable(BaseModel):
         if self.training:
             g1, g2 = pair.g1, pair.g2
             if opt.exclude_root:
-                buffer_entry_list = [BufferEntry(edge, g1, g2, search_tree) for edge in search_tree.edges if edge.state_prev.action_prev is not None]
+                buffer_entry_list = [BufferEntry(edge, g1, g2, search_tree) for edge in search_tree.edges if
+                                     edge.state_prev.action_prev is not None]
             else:
                 buffer_entry_list = [BufferEntry(edge, g1, g2, search_tree) for edge in search_tree.edges]
         else:
@@ -738,11 +756,11 @@ class MCSplitRLBacktrackScalable(BaseModel):
         best_v_score = -float('inf')
         for bd in unroll_bidomains(action_space_data.natts2bds_unexhausted):
             l_actions, r_actions = list(bd.left), list(bd.right)
-            if last_v in l_actions: # technically, this should be redundant?
+            if last_v in l_actions:  # technically, this should be redundant?
                 pruned_w = set() if last_v not in state.pruned_actions.l2r else state.pruned_actions.l2r[last_v]
                 r_actions = list(set(r_actions) - pruned_w)
                 w = r_actions[np.argmax(rvec[r_actions])]
-                best_action = (last_v,w)
+                best_action = (last_v, w)
                 break
             else:
                 argmax_idx = np.argmax(lvec[l_actions])
@@ -750,14 +768,14 @@ class MCSplitRLBacktrackScalable(BaseModel):
                 v = l_actions[argmax_idx]
                 if v_score > best_v_score:
                     w = r_actions[np.argmax(rvec[r_actions])]
-                    best_action = (v,w)
+                    best_action = (v, w)
 
         assert best_action is not None
         return best_action
 
     def _compute_eps(self):
         eps = max(self.Q_eps_end, self.Q_eps_start -
-                  self.train_counter * self.Q_eps_dec_each_iter)
+                  self.train_counter*self.Q_eps_dec_each_iter)
         return eps
 
     def _rank_actions_from_q_vec(self, q_vec, state, action_space_data):
@@ -780,7 +798,7 @@ class MCSplitRLBacktrackScalable(BaseModel):
         q_vec_idx_argmax = torch.argmax(q_vec, dim=0)
         if random.random() < eps or opt.randQ:  # and state.action_prev is None):
             # randomly pick an index
-            q_vec_idx = int(random.random() * q_vec.size(0))
+            q_vec_idx = int(random.random()*q_vec.size(0))
 
         else:
             q_vec_idx = q_vec_idx_argmax
@@ -940,7 +958,7 @@ class MCSplitRLBacktrackScalable(BaseModel):
         N_g1 = set(g1.neighbors(u)) - set(nn_map.keys())
         N_g2 = set(g2.neighbors(v)) - set(nn_map.values())
 
-        nn_map_neighbors_new =\
+        nn_map_neighbors_new = \
             {
                 'g1': nn_map_neighbors['g1'].union(N_g1) - {u},
                 'g2': nn_map_neighbors['g2'].union(N_g2) - {v}
@@ -1097,7 +1115,7 @@ class MCSplitRLBacktrackScalable(BaseModel):
         q_next = \
             self._get_q_next(next_state, next_action_space_data)
 
-        q_true = (reward + self.reward_calculator.discount * q_next).detach()
+        q_true = (reward + self.reward_calculator.discount*q_next).detach()
 
         return q_pred, q_true, state
 
@@ -1112,7 +1130,7 @@ class MCSplitRLBacktrackScalable(BaseModel):
         return q_max
 
     def get_cum_reward(self, start_state, end_state, num_steps):
-        discount = self.reward_calculator.discount ** num_steps
+        discount = self.reward_calculator.discount**num_steps
         cum_reward = start_state.v_search_tree - discount*end_state.v_search_tree
         return cum_reward
 
@@ -1127,14 +1145,14 @@ class MCSplitRLBacktrackScalable(BaseModel):
                     assert len(cur_end_state.action_next_list) == 1
                     idx = 0
                 else:
-                    idx = int(self.seed.random() * len(cur_end_state.action_next_list))
+                    idx = int(self.seed.random()*len(cur_end_state.action_next_list))
                 next_next_state = cur_end_state.action_next_list[idx].state_next
                 end_state_li.append(next_next_state)
                 cur_end_state = next_next_state
 
             # store as a list of (cum_reward, end_state, num_steps)
             if 'random-path' in self.q_signal:
-                num_steps = int(self.seed.random() * len(end_state_li))
+                num_steps = int(self.seed.random()*len(end_state_li))
                 end_state = end_state_li[num_steps]
                 cum_reward = self.get_cum_reward(next_state, end_state, num_steps)
                 cum_reward_end_state_li = [(cum_reward, end_state, num_steps)]
@@ -1150,8 +1168,8 @@ class MCSplitRLBacktrackScalable(BaseModel):
             for cum_reward, end_state, num_steps in cum_reward_end_state_li:
                 cur_next_state_action_space = self.get_action_space_data_wrapper(end_state, is_mcsp=self.get_is_mcsp())
                 q_max_tgt = self._compute_tgt_q_max(end_state, cur_next_state_action_space)
-                discount_factor = self.reward_calculator.discount ** num_steps
-                q_max += cum_reward + discount_factor * q_max_tgt
+                discount_factor = self.reward_calculator.discount**num_steps
+                q_max += cum_reward + discount_factor*q_max_tgt
             q_max /= len(cum_reward_end_state_li)
         elif 'vanilla-tgt' in self.q_signal:
             # compute q_next via DQN

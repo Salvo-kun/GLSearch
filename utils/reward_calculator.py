@@ -1,7 +1,7 @@
 import numpy as np
 
-class RewardCalculator():
-    def __init__(self, mode, feat_map, calc_bound=None, discount = 1.00):
+class RewardCalculator:
+    def __init__(self, mode:str, feat_map:dict, calc_bound=None, discount = 1.00):
         if ';' in mode:
             mode_name, mode_args = mode.split(';')
             mode_args = mode_args.split(',')

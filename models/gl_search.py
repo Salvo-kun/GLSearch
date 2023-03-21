@@ -13,7 +13,7 @@ class GLSearch(BaseModel):
         super(GLSearch, self).__init__()
         self.scalable: bool = opt.scalable
         self.num_node_feat: int = num_node_feat
-        self.feat_map :dict = feat_map
+        self.feat_map: dict = feat_map
         self._init_layers()
 
     def forward(self, cur_id, iter, batch_data):  # TODO: rewrite this in the classic way (just x passed)
@@ -35,6 +35,9 @@ class GLSearch(BaseModel):
         return total_loss
 
     def _init_layers(self) -> None:
+        """
+        Create the model layers and save them in GLSearch.layers
+        """
         layers = ModuleList()
 
         for i in range(opt.layer_num):

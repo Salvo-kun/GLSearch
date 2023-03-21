@@ -1,3 +1,4 @@
+from __future__ import annotations
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -7,7 +8,7 @@ from torch_geometric.nn import GCNConv, GINConv, GATConv
 # GNN Method
 #########################################################################
 class GNNPropagator(nn.Module):
-    def __init__(self, dims, out_dim, gnn_type, learn_embs, layer_AGG_w_MLP, device):
+    def __init__(self, dims:List[int], out_dim:int, gnn_type:str, learn_embs:bool, layer_AGG_w_MLP: bool, device:str):
         super(GNNPropagator, self).__init__()
         self.n_layers = len(dims) - 1
         self.GNNs = []

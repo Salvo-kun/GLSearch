@@ -4,7 +4,7 @@ class Identity(Module):
     def forward(self, x):
         return x
 
-def create_act(act, num_parameters=None):
+def create_act(act:str , num_parameters=None):
     if act == 'relu' or act == 'ReLU':
         return ReLU()
     elif act == 'prelu':

@@ -51,7 +51,7 @@ class MCSplitRLBacktrack(BaseModel):
         self.sample_strat, self.biased = ('sg', 'full') if opt.smarter_bin_sampling else (('q_max', None) if opt.smart_bin_sampling else (None, 'biased'))
         self.buffer = BinBuffer(self.buffer_size, sample_strat=self.sample_strat, biased=self.biased, no_trivial_pairs=opt.no_trivial_pairs)
         self.reward_calculator = RewardCalculator(opt.reward_calculator_mode, self.feat_map, self.calc_bound)
-        self.dqn, self.dqn_tgt = [Q_network_v1(kwargs['encoder_type'], kwargs['embedder_type'], kwargs['interact_type'], int(kwargs['in_dim']), int(kwargs['n_dim']), int(kwargs['n_layers']), kwargs['GNN_mode'], kwargs['learn_embs'], kwargs['layer_AGG_w_MLP'], kwargs['Q_mode'], kwargs['Q_act'], self.reward_calculator, self._environment)] * 2        
+        self.dqn, self.dqn_tgt = [Q_network_v1(kwargs['encoder_type'], kwargs['embedder_type'], kwargs['interact_type'], int(kwargs['in_dim']), int(kwargs['n_dim']), int(kwargs['n_layers']), kwargs['GNN_mode'], eval(kwargs['learn_embs']), eval(kwargs['layer_AGG_w_MLP']), int(kwargs['Q_mode']), kwargs['Q_act'], self.reward_calculator, self._environment)] * 2
         self.forward_config_dict = self.get_forward_config_dict(self.restore_bidomains, self.total_runtime, self.recursion_threshold, self.q_signal)
         self.method_config_dict = self.get_method_config_dict(self.DQN_mode, self.regret_iters)
         self.time_analysis = opt.time_analysis

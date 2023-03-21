@@ -11,7 +11,6 @@ torch.autograd.set_detect_anomaly(True)
 
 def train():
     datasets = load_dataset_list(opt.dataset_list)
-
     num_node_feat = datasets[0].num_node_features
     feat_map = {}
 

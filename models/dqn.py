@@ -5,41 +5,38 @@ from utils.data_structures.search_tree import ActionSpaceData, ActionSpaceDataSc
 from options import opt
 from models.dvn import DVN
 
+
 class Q_network_v1(nn.Module):
-    def __init__(self, encoder_type, embedder_type, interact_type, in_dim, n_dim,
-                 n_layers, GNN_mode, learn_embs, layer_AGG_w_MLP, Q_mode, Q_act,
-                 reward_calculator=None, environment=None):
+    def __init__(self, encoder_type: str,
+                 embedder_type: str,
+                 in_dim: int,
+                 n_dim: int,
+                 n_layers: int, GNN_mode,
+                 learn_embs: bool,
+                 layer_AGG_w_MLP: bool,
+                 Q_mode: int,
+                 Q_act: str,
+                 reward_calculator=None,
+                 environment=None):
         super(Q_network_v1, self).__init__()
         # TODO: figure out a way to not have to pass in as variables
         #  -> just pass encoder_args, embedder_args, interactor_args
         self.encoder_type = encoder_type
         self.embedder_type = embedder_type
-        self.interact_type = interact_type
-        self.encode = EncoderMLP(in_dim, n_dim)
-        if interact_type == 'dvn':
-            self.embed = None
-            self.interact = None
-            self.dvn = DVN(
-                n_dim, n_layers, learn_embs, layer_AGG_w_MLP, Q_mode, Q_act, reward_calculator,
-                environment)
-        else:
-            assert False
+        self.encode = EncoderMLP(in_dim, n_dim)  # a simple NN linear layer
+        self.dvn = DVN(
+            n_dim, n_layers, learn_embs, layer_AGG_w_MLP, Q_mode, Q_act, reward_calculator,
+            environment)
 
     def __call__(self, dqn_input, detach_in_chunking_stage=False):
         x1_in, x2_in = self.encode(dqn_input.state.ins_g1), self.encode(dqn_input.state.ins_g2)
-        if self.interact_type == 'dvn':
-            q_vec = self._chunked_interact(x1_in, x2_in, dqn_input, detach_in_chunking_stage,
+        q_vec = self._chunked_interact(x1_in, x2_in, dqn_input, detach_in_chunking_stage,
                                            self.dvn)
-        else:
-            assert False
         return q_vec
 
     def get_g_scores(self, dqn_input):
         # TODO: fix below duplicate code with li 53-57
         x1_in, x2_in = self.encode(dqn_input.state.ins_g1), self.encode(dqn_input.state.ins_g2)
-        if self.interact_type != 'dvn':
-            assert False # dqn version not supported
-            x1_in, x2_in, _, _, _ = self.embed(x1_in, x2_in, dqn_input)
         return self.dvn.get_g_scores(x1_in, x2_in, dqn_input)
 
     def _chunked_interact(self, x1_in, x2_in, dqn_input, detach_in_chunking_stage, fun):
@@ -73,17 +70,17 @@ class Q_network_v1(nn.Module):
     def obtain_chunk(self, dqn_input, prev_slice_idx, next_slice_idx):
         v1f_idx, v2f_idx, bd_indices = dqn_input.action_space_data.action_space
         action_space_chunk = v1f_idx[prev_slice_idx:next_slice_idx], \
-                             v2f_idx[prev_slice_idx:next_slice_idx], \
-                             bd_indices[prev_slice_idx:next_slice_idx]
+            v2f_idx[prev_slice_idx:next_slice_idx], \
+            bd_indices[prev_slice_idx:next_slice_idx]
         action_space_data_chunk = ActionSpaceData(
             action_space_chunk,
             dqn_input.action_space_data.unexhausted_bds,
             dqn_input.action_space_data.bds,
-            dqn_input.action_space_data.bdids)  if not opt.scalable else ActionSpaceDataScalable(
-	            action_space_chunk,
-	            dqn_input.action_space_data.natts2bds_unexhausted,
-	            dqn_input.action_space_data.action_space_size_unexhausted_unpruned)
-            
+            dqn_input.action_space_data.bdids) if not opt.scalable else ActionSpaceDataScalable(
+            action_space_chunk,
+            dqn_input.action_space_data.natts2bds_unexhausted,
+            dqn_input.action_space_data.action_space_size_unexhausted_unpruned)
+
         dqn_input_chunk = DQNInput(dqn_input.state, action_space_data_chunk, dqn_input.restore_bidomains)
         return dqn_input_chunk
 
@@ -92,7 +89,7 @@ class Q_network_v1(nn.Module):
 
 
 class EncoderMLP(nn.Module):
-    def __init__(self, in_dim, n_dim):
+    def __init__(self, in_dim: int, n_dim: int):
         super(EncoderMLP, self).__init__()
         self.mlp = nn.Linear(in_dim, n_dim)
 

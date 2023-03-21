@@ -1,4 +1,6 @@
 .venv/
+__pycache__
+logs/
 .idea
 data/klepto_files
 data/dataset_files/*

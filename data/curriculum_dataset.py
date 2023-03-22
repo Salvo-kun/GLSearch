@@ -18,13 +18,14 @@ class CurriculumDataset(BaseDataset):
     num_node_features: int = None
     opt = None
 
-    def __init__(self, dataset: Dataset, gid1gid2_list, num_node_features: int):
+    def __init__(self, dataset: Dataset, gid1gid2_list, num_node_features: int, num_iter:int = 1):
         super(CurriculumDataset, self).__init__(opt=opt)
         self.dataset = dataset
         self.gid1gid2_list = gid1gid2_list
         self.num_node_features = num_node_features
         self.opt = opt
         self.name = dataset.name
+        self.num_iter = num_iter
 
     def __len__(self):
         return len(self.gid1gid2_list)
@@ -47,7 +48,7 @@ class CurriculumDataset(BaseDataset):
         return new_dataset
 
     @staticmethod
-    def merge(dataset_list: List[CurriculumDataset], num_pairs_list: List[int]) -> CurriculumDataset:
+    def merge(dataset_list: List[CurriculumDataset], num_pairs_list: List[int], num_iter:int) -> CurriculumDataset:
         """
         Merge a list of datasets
         """
@@ -61,7 +62,7 @@ class CurriculumDataset(BaseDataset):
         gid1gid2_list = torch.tensor(list(pairs_cum.keys()), device=opt.device)
         dataset = Dataset(name, gs_cum, pairs_cum)
         logging.info('Merged curriculum dataset: %s', name)
-        return CurriculumDataset(dataset, gid1gid2_list, num_node_feat)
+        return CurriculumDataset(dataset, gid1gid2_list, num_node_feat, num_iter)
 
     def __str__(self):
         return self.dataset.__str__() + \

@@ -46,9 +46,13 @@ class DebugOptionsObject:
               ('syn:np_tr=20,np_te=20,nn_core=-1,nn_tot=66,ed=0.2|4,gen_type=WS', -1),
               ], 2500)
         ]
-        elif True:
+        elif False:
             self.dataset_list = [
                 ([('duogexfroadNet-CA_rw_1957_1;roadNet-CA_rw_1957_2', 1)], 1),
+            ]
+        elif True:
+            self.dataset_list = [
+                ([('ptc', 30)], 2500),
             ]
         else:
             self.dataset_list = [
@@ -67,6 +71,7 @@ class DebugOptionsObject:
         self.shuffle_input = False
         self.model = 'MCSRL_backtrack'
         self.dataset = 'cocktail'
+        # TODO write better the layer_1 config
         # original: self.layer_1 = 'MCSRL_backtrack:Q_sampling=canonical_0.000016_0.16_0.01,DQN_mode=tgt_q_network,Q_BD=True,loss_fun=mse,q_signal=fitted-tgt-random-path,sync_target_frames=100,beta_reward=0,perc_IL=-1,buffer_start_iter=11,buffer_size=1024,sample_size=32,sample_all_edges=False,sample_all_edges_thresh=-1,eps_testing=False,recursion_threshold=-1,total_runtime=-1,save_every_recursion_count=-1,save_every_runtime=-1,mcsplit_heuristic_on_iter_one=False,restore_bidomains=False,no_pruning=False,regret_iters=3,populate_reply_buffer_every_iter=-1,encoder_type=abcd,embedder_type=abcd,interact_type=dvn,n_dim=64,n_layers=3,GNN_mode=GAT,learn_embs=True,layer_AGG_w_MLP=True,Q_mode=8,Q_act=elu+1,disentangle_search_tree=False,mcsp_before_perc=0.1'
         self.layer_1 = 'MCSRL_backtrack:Q_sampling=canonical_0.000016_0.16_0.01,DQN_mode=tgt_q_network,Q_BD=True,loss_fun=mse,q_signal=fitted-tgt-random-path,sync_target_frames=100,beta_reward=0,perc_IL=-1,buffer_start_iter=11,buffer_size=1024,sample_size=32,sample_all_edges=False,sample_all_edges_thresh=-1,eps_testing=False,recursion_threshold=-1,total_runtime=-1,save_every_recursion_count=-1,save_every_runtime=-1,mcsplit_heuristic_on_iter_one=False,restore_bidomains=False,no_pruning=False,regret_iters=3,populate_reply_buffer_every_iter=-1,encoder_type=abcd,embedder_type=abcd,n_dim=64,n_layers=3,GNN_mode=GAT,learn_embs=True,layer_AGG_w_MLP=True,Q_mode=8,Q_act=elu+1,disentangle_search_tree=False,mcsp_before_perc=0.1'
         self.layer_num = 1
@@ -87,7 +92,7 @@ class DebugOptionsObject:
         self.total_runtime = -1
         self.recursion_threshold = 7500
         self.time_analysis = False
-        self.val_every_iter = 1
+        self.val_every_iter = 100 if self.phase == 'train' else 1
         self.supervised_before = 1
         self.imitation_before = 1
         self.a2c_networks = False
@@ -103,7 +108,12 @@ class DebugOptionsObject:
         self.exclude_root = False
         self.plot_final_tree = True
         self.randQ = False
-        self.node_feats_for_mcs = ['type']
+        if self.phase == 'train':
+            self.node_feats_for_mcs = []
+        else:
+            # TODO in test phase, original might have different values
+            self.node_feats_for_mcs = ['type']
+
         # feature encoders
         self.node_fe_1 = 'one_hot'
         self.node_fe_2 = 'local_degree_profile'

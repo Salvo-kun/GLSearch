@@ -3,7 +3,7 @@ from options import opt
 from torch.utils.data import DataLoader
 from torch.optim import Adam
 from data import BatchData, load_dataset_list
-from models.gl_search import GLSearch
+from models.gl_search import GLSearch, ModelParams
 import logging
 
 torch.autograd.set_detect_anomaly(True)
@@ -21,7 +21,7 @@ def train():
     num_iters_total_limit = 0
 
     for curriculum_id, curriculum_dataset in enumerate(datasets):
-        num_iters_total_limit += opt.dataset_list[curriculum_id][1]
+        num_iters_total_limit += curriculum_dataset.num_iter
         data_loader = DataLoader(curriculum_dataset, batch_size=opt.batch_size, shuffle=opt.shuffle_input)
         num_iters = 0
         total_loss = 0.0
@@ -38,7 +38,7 @@ def train():
 
             model.train()
             model.zero_grad()
-            loss = model(curriculum_id, num_iters_total, batch_data)
+            loss = model(ModelParams(curriculum_id, num_iters_total, batch_data))
 
             if loss is not None:
                 if opt.retain_graph:

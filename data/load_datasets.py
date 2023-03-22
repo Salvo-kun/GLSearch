@@ -18,7 +18,8 @@ def load_dataset_list(dataset_list: List[Tuple[List[Tuple[str, int]]]] or str) -
     # For each curriculum
     for curriculum in dataset_list:
         dataset_name_list = curriculum[0]
-        assert type(curriculum[1]) is int
+        num_iter = curriculum[1]
+        assert type(num_iter) is int
         cur_datasets = []
         num_pairs_list = []
         # Load and merge all the datasets within the curriculum
@@ -28,7 +29,7 @@ def load_dataset_list(dataset_list: List[Tuple[List[Tuple[str, int]]]] or str) -
             cur_datasets.append(dataset)
             num_pairs_list.append(num_pairs)
 
-        data.append(CurriculumDataset.merge(cur_datasets, num_pairs_list))
+        data.append(CurriculumDataset.merge(cur_datasets, num_pairs_list, num_iter))
     return data
 
 

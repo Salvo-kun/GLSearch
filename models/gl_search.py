@@ -1,5 +1,5 @@
 from __future__ import annotations
-from models.base_model import BaseModel
+from models.base_model import BaseModel, ModelParams
 from torch.nn import ModuleList
 from models.mcs_rl_backtrack import MCSplitRLBacktrack
 from models.mcs_rl_backtrack_scalable import MCSplitRLBacktrackScalable
@@ -16,19 +16,19 @@ class GLSearch(BaseModel):
         self.feat_map: dict = feat_map
         self._init_layers()
 
-    def forward(self, cur_id, iter, batch_data):  # TODO: rewrite this in the classic way (just x passed)
+    def forward(self, x: ModelParams) -> int:
         t = time()
-        acts = [batch_data.merge_data['merge'].x]
+        acts = [x.batch_data.merge_data['merge'].x]
 
         for layer in self.layers:
             ins = acts[-1]
-            outs = layer(ins, batch_data, iter=iter, cur_id=cur_id)
+            outs = layer(ModelParams.forge_layer_params(x, ins))
             acts.append(outs)
 
         total_loss = acts[-1]
 
         if not self.training:
-            for pair in batch_data.pair_list:
+            for pair in x.batch_data.pair_list:
                 # Divide by the batch size and the running time is not precisely per-pair based.
                 pair.assign_pred_time((time() - t)*1000/opt.batch_size)  # msec
 
@@ -52,3 +52,4 @@ class GLSearch(BaseModel):
                 MCSplitRLBacktrackScalable(**layer_info) if self.scalable else MCSplitRLBacktrack(**layer_info))
 
         self.layers = layers
+

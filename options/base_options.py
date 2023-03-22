@@ -51,7 +51,8 @@ class BaseOptions():
         self.parser.add_argument('--data_folder', type=str, default=os.path.join("data", "dataset_files"), help='path to the folder containing the dataset files (in pickle json format)')
         self.parser.add_argument('--dataset_list', type=list, default=dataset_list, help='list of datasets to train on')
         self.parser.add_argument('--shuffle_input', type=bool, default=False, help='')
-        self.parser.add_argument('--batch_size', type=int, default=1, help='')        
+        self.parser.add_argument('--batch_size', type=int, default=1, help='')
+        self.parser.add_argument('--scalable', type=bool, default=True)
         self.parser.add_argument('--model', default='MCSRL_backtrack')
         self.parser.add_argument('--dataset', default='cocktail')
         self.parser.add_argument('--load_model', default=None)
@@ -108,8 +109,7 @@ class BaseOptions():
         self.parser.add_argument('--only_iters_for_debug', type=int, default=None)
         self.parser.add_argument('--time_analysis', type=bool, default=False)
         self.parser.add_argument('--save_model', type=bool, default=True)
-        self.parser.add_argument('--node_ordering', default=None) 
-        self.parser.add_argument('--scalable', type=bool, default=None) 
+        self.parser.add_argument('--node_ordering', default=None)
         self.parser.add_argument('--exclude_root', default=False)
         
         self.initialized = True

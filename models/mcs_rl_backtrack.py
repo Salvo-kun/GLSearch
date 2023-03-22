@@ -1,7 +1,8 @@
+from __future__ import annotations
 from collections import defaultdict
 import random
 from torch.nn import MSELoss, BCEWithLogitsLoss
-from models.base_model import BaseModel
+from models.base_model import BaseModel,ModelParams
 from utils.options import parse_bool
 from utils.validation import validate, IS_POSITIVE, IS_BETWEEN_0_AND_1
 from copy import deepcopy
@@ -61,18 +62,18 @@ class MCSplitRLBacktrack(BaseModel):
     #########################################################
     # Forward Procedure
     #########################################################
-    def forward(self, ins, batch_data, iter=None, cur_id=None):
+    def forward(self, x:GLSeatchParams):
         if self.timer:
-            self.timer.time_and_clear(f'forward iter {iter} start')
+            self.timer.time_and_clear(f'forward iter {x.iteration} start')
 
-        forward_mode = self.get_forward_mode(iter)
+        forward_mode = self.get_forward_mode(x.iteration)
         self.apply_forward_config(self.forward_config_dict[forward_mode])            
             
         methods = opt.val_method_list if forward_mode == TEST_MODE else (['dqn'] if forward_mode == TRAIN_MODE else ['mcspv2'])
         for method in methods:
             # run forward model
             self.apply_method_config(self.method_config_dict[method])
-            pair_list, state_init_list = self._preprocess_forward(ins, batch_data, cur_id)
+            pair_list, state_init_list = self._preprocess_forward(x.ins, x.batch_data, x.cur_id)
             self._forward_batch(pair_list, state_init_list)
             
         if forward_mode != TEST_MODE:    
@@ -198,7 +199,10 @@ class MCSplitRLBacktrack(BaseModel):
                 
         return forward_mode
 
-    def get_forward_config_dict(self, restore_bidomains, total_runtime, recursion_threshold, q_signal):
+    def get_forward_config_dict(self, restore_bidomains, total_runtime, recursion_threshold, q_signal) -> Dict[str, ForwardConfig]:
+        """
+        Return a dict of the configurations for the training stages
+        """
         self.q_signal = None
         self.recursion_threshold = None
         self.restore_bidomains = None
@@ -212,49 +216,49 @@ class MCSplitRLBacktrack(BaseModel):
         forward_config_dict = {
             PRETRAIN_MODE:
                 ForwardConfig(
-                    10,
-                    None,
-                    'LB',
-                    True,
-                    True,
-                    False,
-                    True,
+                    10,         # total_runtime
+                    None,       # recursion_threshold
+                    'LB',       # q_signal
+                    True,       # restore_bidomains
+                    True,       # search_path
+                    False,      # no_pruning
+                    True,       # training
                 ),
             IMITATION_MODE:
                 ForwardConfig(
-                    total_runtime,
-                    recursion_threshold,
-                    q_signal,
-                    restore_bidomains,
-                    False,
-                    True,
-                    True
+                    total_runtime,          # total_runtime
+                    recursion_threshold,    # recursion_threshold
+                    q_signal,               # q_signal
+                    restore_bidomains,      # restore_bidomains
+                    False,                  # search_path
+                    True,                   # no_pruning
+                    True                    # training
                 ),
             TRAIN_MODE:
                 ForwardConfig(
-                    total_runtime,
-                    recursion_threshold,
-                    q_signal,
-                    restore_bidomains,
-                    False,
-                    True,
-                    True
+                    total_runtime,          # total_runtime
+                    recursion_threshold,    # recursion_threshold
+                    q_signal,               # q_signal
+                    restore_bidomains,      # restore_bidomains
+                    False,                  # search_path
+                    True,                   # no_pruning
+                    True                    # training
                 ),
             TEST_MODE:
                 ForwardConfig(
-                    total_runtime_test,
-                    recursion_threshold_test,
-                    q_signal,
-                    False,
-                    False,
-                    False,
-                    False
+                    total_runtime_test,         # total_runtime
+                    recursion_threshold_test,   # recursion_threshold
+                    q_signal,                   # q_signal
+                    False,                      # restore_bidomains
+                    False,                      # search_path
+                    False,                      # no_pruning
+                    False                       # training
                 )
         }
 
         return forward_config_dict
 
-    def get_method_config_dict(self, DQN_mode, regret_iters):
+    def get_method_config_dict(self, DQN_mode:str, regret_iters:int):
         self.DQN_mode = None
         self.regret_iters = None
 

@@ -2,12 +2,13 @@ from __future__ import annotations
 from collections import defaultdict
 import random
 from torch.nn import MSELoss, BCEWithLogitsLoss
-from models.base_model import BaseModel
+from models.base_model import BaseModel, ModelParams
 from utils.options import parse_bool
 from utils.validation import validate, IS_POSITIVE, IS_BETWEEN_0_AND_1
 from copy import deepcopy
 import numpy as np
 import torch
+from torch import Tensor
 from torch.nn.functional import softmax
 from utils.graph import create_edge_index, create_adj_set
 from utils.timer import OurTimer
@@ -22,6 +23,7 @@ from utils.saver import saver
 from options import opt
 from utils.mc_split import McspVec, BufferEntry, ForwardConfig, MethodConfig, IMITATION_MODE, PRETRAIN_MODE, TRAIN_MODE, \
     TEST_MODE
+from data.src import *
 
 
 #########################################################################
@@ -62,7 +64,8 @@ class MCSplitRLBacktrackScalable(BaseModel):
         self.reward_calculator = RewardCalculator(opt.reward_calculator_mode, self.feat_map, self.calc_bound)
         self.dqn, self.dqn_tgt = [Q_network_v1(kwargs['encoder_type'], kwargs['embedder_type'],
                                                int(kwargs['in_dim']), int(kwargs['n_dim']), int(kwargs['n_layers']),
-                                               kwargs['GNN_mode'], eval(kwargs['learn_embs']), eval(kwargs['layer_AGG_w_MLP']),
+                                               kwargs['GNN_mode'], eval(kwargs['learn_embs']),
+                                               eval(kwargs['layer_AGG_w_MLP']),
                                                int(kwargs['Q_mode']), kwargs['Q_act'], self.reward_calculator,
                                                self._environment)]*2
         self.forward_config_dict = self.get_forward_config_dict(self.restore_bidomains, self.total_runtime,
@@ -71,15 +74,17 @@ class MCSplitRLBacktrackScalable(BaseModel):
         self.time_analysis = opt.time_analysis
         self.timer = OurTimer() if self.time_analysis else None
         self.val_every_iter, self.supervised_before, self.imitation_before = opt.val_every_iter, opt.supervised_before, opt.imitation_before
+        self.search_path = None
+        self.no_pruning = None
 
     #########################################################
     # Forward Procedure
     #########################################################
-    def forward(self, ins, batch_data, iter=None, cur_id=None):
+    def forward(self, x: ModelParams):
         if self.timer:
-            self.timer.time_and_clear(f'forward iter {iter} start')
+            self.timer.time_and_clear(f'forward iter {x.iteration} start')
 
-        forward_mode = self.get_forward_mode(iter)
+        forward_mode = self.get_forward_mode(x.iteration)
         self.apply_forward_config(self.forward_config_dict[forward_mode])
 
         methods = opt.val_method_list if forward_mode == TEST_MODE else (
@@ -87,7 +92,7 @@ class MCSplitRLBacktrackScalable(BaseModel):
         for method in methods:
             # run forward model
             self.apply_method_config(self.method_config_dict[method])
-            pair_list, state_init_list = self._preprocess_forward(ins, batch_data, cur_id)
+            pair_list, state_init_list = self._preprocess_forward(x.ins, x.batch_data, x.cur_id)
             self._forward_batch(pair_list, state_init_list)
 
         if forward_mode != TEST_MODE:
@@ -102,7 +107,7 @@ class MCSplitRLBacktrackScalable(BaseModel):
 
         return loss
 
-    def _forward_batch(self, pair_list, state_init_list):
+    def _forward_batch(self, pair_list: List[GraphPair], state_init_list: List[StateNode]):
         for pair, state_init in zip(pair_list, state_init_list):
             # run the search procedure
             search_tree = self._forward_single_tree(state_init)
@@ -260,8 +265,8 @@ class MCSplitRLBacktrackScalable(BaseModel):
     #########################################################
     # Utility Functions
     #########################################################
-    def get_forward_mode(self, iter):
-        if iter%self.val_every_iter == 0:
+    def get_forward_mode(self, iteration: int) -> str:
+        if iteration%self.val_every_iter == 0:
             forward_mode = TEST_MODE
         else:
             self.train_counter += 1
@@ -274,7 +279,8 @@ class MCSplitRLBacktrackScalable(BaseModel):
 
         return forward_mode
 
-    def get_forward_config_dict(self, restore_bidomains, total_runtime, recursion_threshold, q_signal):
+    def get_forward_config_dict(self, restore_bidomains: bool, total_runtime: int, recursion_threshold: int,
+                                q_signal: str):
         self.q_signal = None
         self.recursion_threshold = None
         self.restore_bidomains = None
@@ -330,7 +336,7 @@ class MCSplitRLBacktrackScalable(BaseModel):
 
         return forward_config_dict
 
-    def get_method_config_dict(self, DQN_mode, regret_iters):
+    def get_method_config_dict(self, DQN_mode, regret_iters) -> Dict[str, MethodConfig]:
         self.DQN_mode = None
         self.regret_iters = None
 
@@ -353,7 +359,7 @@ class MCSplitRLBacktrackScalable(BaseModel):
         }
         return method_config_dict
 
-    def apply_forward_config(self, forward_config):
+    def apply_forward_config(self, forward_config: ForwardConfig) -> None:
         self.total_runtime = forward_config.total_runtime
         self.recursion_threshold = forward_config.recursion_threshold
         self.q_signal = forward_config.q_signal
@@ -362,7 +368,7 @@ class MCSplitRLBacktrackScalable(BaseModel):
         self.search_path = forward_config.search_path
         self.training = forward_config.training
 
-    def apply_method_config(self, method_config):
+    def apply_method_config(self, method_config: MethodConfig) -> None:
         self.DQN_mode = method_config.DQN_mode
         self.regret_iters = method_config.regret_iters
 
@@ -527,33 +533,32 @@ class MCSplitRLBacktrackScalable(BaseModel):
     # Utility functions (forward procedure)
     ##########################################################
 
-    def _preprocess_forward(self, ins, batch_data, cur_id):
+    def _preprocess_forward(self, ins: torch.Tensor, batch_data: BatchData, cur_id: int) -> (
+            List[GraphPair], List[StateNode]):
         offset = 0
         state_init_list = []
-        pair_list = batch_data.pair_list
+        pair_list: List[GraphPair] = batch_data.pair_list
         for pair in pair_list:
             # set up general input data
             g1, g2 = pair.g1, pair.g2  # Get graph from a pair
-            ins_g1, ins_g2, offset = self.compute_ins(g1, g2, ins,
-                                                      offset)  # Compute their tensors from the contiguous one (ins) and update offset
+            ins_g1, ins_g2, offset = compute_ins(g1, g2, ins,
+                                                 offset)  # Compute their tensors from the contiguous one (ins) and update offset
             edge_index1, edge_index2 = create_edge_index(g1), create_edge_index(
-                g2)  # Create indexes for the edges of each graph
+                g2)  # Create indexes for the edges of each graph. Tensor of shape [2, 2*|E|]
+            # FIXME not an actual adjacency list! For each node, it contains the indices of the edges that are incident to it (edge stored in edge_index).
+            #       Consider transofrming into actual adjacency list, or give it a less misleading name
             adj_list1, adj_list2 = create_adj_set(g1), create_adj_set(g2)  # Create adjacency matrix for each graph
             nn_map = {}
             nn_map_neighbors = {'g1': set(), 'g2': set()}
 
-            ######################################  Adds node id of each nodes of each graph using its hash as key
-            natts2g2nids = defaultdict(lambda: defaultdict(set))
-            for nid in range(g1.number_of_nodes()):
-                natts2g2nids[get_natts_hash(g1.nodes[nid])]['g1'].add(nid)
-            for nid in range(g2.number_of_nodes()):
-                natts2g2nids[get_natts_hash(g2.nodes[nid])]['g2'].add(nid)
+            # group nodes by type ( = natts) and configure bidomains ( = bds)
+            natts2g2nids = group_by_graph_nodes_by_type(g1, g2)
             natts2bds = {}
-
             natts2g2abd_sg_nids = get_natts2g2abd_sg_nids(natts2g2nids, natts2bds, nn_map)  # TODO: understand this
-            ######################################
-            MCS_size_UB = self.calc_bound_helper(natts2bds, natts2g2nids,
-                                                 natts2g2abd_sg_nids)  # Calculate MCS upper bound
+
+            # calculate upper bound for MCS size (solution size in best-case scenario)
+            MCS_size_UB = calc_bound_helper(natts2bds, natts2g2nids,
+                                            natts2g2abd_sg_nids)  # Calculate MCS upper bound
 
             # set up special input data
             mcsp_vec = None
@@ -580,12 +585,6 @@ class MCSplitRLBacktrackScalable(BaseModel):
             state_init_list.append(state_init)
         assert len(pair_list) == len(state_init_list)
         return pair_list, state_init_list
-
-    def compute_ins(self, g1, g2, ins, offset):
-        M, N = g1.number_of_nodes(), g2.number_of_nodes()
-        ins_g1, ins_g2 = ins[offset:offset + M], ins[offset + M:offset + N + M]
-        offset += (N + M)  # used for grabbing the right input embeddings
-        return ins_g1, ins_g2, offset
 
     def _tgt_net_sync_itr(self):
         valid_iteration = self.train_counter%self.sync_target_frames == 0
@@ -688,33 +687,7 @@ class MCSplitRLBacktrackScalable(BaseModel):
             natts2bds_filtered = state.natts2bds
 
         return \
-            self.calc_bound_helper(natts2bds_filtered, natts2g2nids, natts2g2abd_sg_nids)
-
-    def calc_bound_helper(self, natts2bds, natts2g2nids, natts2g2abd_sg_nids):
-
-        bd_lens = []
-        # adjacent bidomains
-        for bd in unroll_bidomains(natts2bds):
-            bd_lens.append((len(bd.left), len(bd.right)))
-
-        # disconnected bidomains
-        for natts, g2nids in natts2g2nids.items():
-            if natts in natts2g2abd_sg_nids:
-                #: NOTE: NO GUARANTEE THAT 0 len unconnected bds are not appended here!
-                g2abd_sg_nids = natts2g2abd_sg_nids[natts]
-                bd_lens.append(
-                    (
-                        len(g2nids['g1']) - len(g2abd_sg_nids['g1']),
-                        len(g2nids['g2']) - len(g2abd_sg_nids['g2'])
-                    )
-                )
-            else:
-                bd_lens.append((len(g2nids['g1']), len(g2nids['g2'])))
-
-        bound = 0
-        for left_len, right_len in bd_lens:
-            bound += min(left_len, right_len)
-        return bound
+            calc_bound_helper(natts2bds_filtered, natts2g2nids, natts2g2abd_sg_nids)
 
     ##########################################################
     # Utility functions (forward single edge procedure)
@@ -848,7 +821,7 @@ class MCSplitRLBacktrackScalable(BaseModel):
 
         MCS_size_UB = \
             len(nn_map) + \
-            self.calc_bound_helper(natts2bds, state.natts2g2nids, natts2g2abd_sg_nids)
+            calc_bound_helper(natts2bds, state.natts2g2nids, natts2g2abd_sg_nids)
 
         if self.restore_bidomains:
             exhausted_v = deepcopy(exhausted_v)
@@ -1228,3 +1201,53 @@ class MCSplitRLBacktrackScalable(BaseModel):
             (q_pred, q_true)
         )
         return loss_input_li
+
+
+def compute_ins(g1: Graph, g2: Graph, ins: Tensor, offset: int) -> Tuple[Tensor, Tensor, int]:
+    M, N = g1.number_of_nodes(), g2.number_of_nodes()
+    ins_g1, ins_g2 = ins[offset:offset + M], ins[offset + M:offset + N + M]
+    offset += (N + M)  # used for grabbing the right input embeddings
+    return ins_g1, ins_g2, offset
+
+
+def group_by_graph_nodes_by_type(g1: Graph, g2: Graph) -> Dict[int, Dict[str, Set[int]]]:
+    """
+    Group nodes by type in each graph.
+    @return: a dict of {type: {g1: set of node ids, g2: set of node ids}}
+    """
+    natts2g2nids = defaultdict(lambda: defaultdict(set))
+    for nid in range(g1.number_of_nodes()):
+        natts2g2nids[get_natts_hash(g1.nodes[nid])]['g1'].add(nid)
+    for nid in range(g2.number_of_nodes()):
+        natts2g2nids[get_natts_hash(g2.nodes[nid])]['g2'].add(nid)
+    return natts2g2nids
+
+
+def calc_bound_helper(natts2bds: dict, natts2g2nids: dict, natts2g2abd_sg_nids: dict) -> int:
+    """
+    Compute the size of the best solution we could have with the current bidomains (solution upper bound).
+    """
+
+    bd_lens = []
+    # adjacent bidomains
+    for bd in unroll_bidomains(natts2bds):
+        bd_lens.append((len(bd.left), len(bd.right)))
+
+    # disconnected bidomains
+    for natts, g2nids in natts2g2nids.items():
+        if natts in natts2g2abd_sg_nids:
+            #: NOTE: NO GUARANTEE THAT 0 len unconnected bds are not appended here!
+            g2abd_sg_nids = natts2g2abd_sg_nids[natts]
+            bd_lens.append(
+                (
+                    len(g2nids['g1']) - len(g2abd_sg_nids['g1']),
+                    len(g2nids['g2']) - len(g2abd_sg_nids['g2'])
+                )
+            )
+        else:
+            bd_lens.append((len(g2nids['g1']), len(g2nids['g2'])))
+
+    bound = 0
+    for left_len, right_len in bd_lens:
+        bound += min(left_len, right_len)
+    return bound

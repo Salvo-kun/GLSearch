@@ -1,5 +1,4 @@
-from options.base_options import BaseOptions
-from utils.validation import null_coalescence
+from options.base_options import BaseOptions, null_coalescence
 
 class TrainOptions(BaseOptions):
     def initialize(self):

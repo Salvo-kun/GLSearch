@@ -4,7 +4,7 @@ from torch_scatter import scatter_add
 import torch.nn as nn
 from utils.timer import OurTimer
 import torch
-
+from torch import Tensor
 from options import opt
 from models.gnn_propagator import GNNPropagator
 from models.mlp import MLP
@@ -14,6 +14,9 @@ import math
 import torch.nn.functional as F
 from collections import defaultdict
 from utils.reward_calculator import RewardCalculator
+
+
+
 
 
 class DVN(nn.Module):
@@ -225,20 +228,20 @@ class DVN(nn.Module):
         embs = self.cached_op(
             fn=self.compute_embs,
             args=(x1_in, x2_in, edge_index1, edge_index2),
-            key=self.get_pair_key(dqn_input, ext='e')
+            key=get_pair_key(dqn_input, ext='e')
         )
 
         # TODO: check if g_embs is combined
         g_embs = self.cached_op(
             fn=self.compute_g,
             args=(embs,),
-            key=self.get_pair_key(dqn_input, ext='g')
+            key=get_pair_key(dqn_input, ext='g')
         )
 
         sg_embs_raw = self.cached_op(
             fn=self.compute_sg,
             args=(embs, dqn_input),
-            key=self.get_state_key(dqn_input, ext='g')
+            key=get_state_key(dqn_input, ext='g')
         )
 
         sgs1 = F.normalize(self.MLP_sg(sg_embs_raw[0]), dim=1, p=2)
@@ -265,10 +268,11 @@ class DVN(nn.Module):
 
         return g_scores
 
-    def __call__(self, x1_in, x2_in, dqn_input):
+    def __call__(self, x1_in: Tensor, x2_in: Tensor, dqn_input:DQNInput):
         s_raw_list, s_raw_q_vec_idx_list = [], []
         v_list, w_list, _ = dqn_input.action_space_data.action_space
         q_vec = torch.zeros(len(v_list)).to(opt.device)
+        # get the edge_indices without the exhausted nodes
         edge_index1 = dqn_input.valid_edge_index1
         edge_index2 = dqn_input.valid_edge_index2
 
@@ -282,22 +286,25 @@ class DVN(nn.Module):
 
         # Q = r + DVN(state)
 
+        # Run GNN
         embs = self.cached_op(
             fn=self.compute_embs,
             args=(x1_in, x2_in, edge_index1, edge_index2),
-            key=self.get_pair_key(dqn_input, ext='e')
+            key=get_pair_key(dqn_input, ext='e')
         )
 
+        # Run MLP layers
         g_embs = self.cached_op(
             fn=self.compute_g,
             args=(embs,),
-            key=self.get_pair_key(dqn_input, ext='g')
+            key=get_pair_key(dqn_input, ext='g')
         )
 
+        # combine results
         sg_embs = self.cached_op(
             fn=self.compute_sg,
             args=(embs, dqn_input),
-            key=self.get_state_key(dqn_input, ext='g')
+            key=get_state_key(dqn_input, ext='g')
         )
 
         # A = (a1, a2, a3)
@@ -356,7 +363,8 @@ class DVN(nn.Module):
 
         return q_vec
 
-    def cached_op(self, fn, args, key):
+    def cached_op(self, fn:Callable, args:Tuple[Tensor], key:Tuple[str, tuple]):
+        """Cache the results of a function call => self.cache_d[key] = fn(*args)"""
         hierarchy, sub_key = key
         if hierarchy not in self.cache_d:
             self.cache_d[hierarchy] = {}
@@ -369,22 +377,6 @@ class DVN(nn.Module):
         else:
             val = self.cache_d[hierarchy][sub_key]
         return val
-
-    def get_pair_key(self, dqn_input, ext=''):
-        hierarchy = f'pair_{ext}'
-        exhausted_v, exhausted_w = frozenset(), frozenset()
-        sub_key = \
-            (dqn_input.state.cur_id, dqn_input.pair_id, exhausted_v, exhausted_w)
-        key = (hierarchy, sub_key)
-        return key
-
-    def get_state_key(self, dqn_input, ext=''):
-        hierarchy = f'state_{ext}'
-        sub_key = (dqn_input.pair_id,
-                   frozenset(dqn_input.state.nn_map.keys()),
-                   frozenset(dqn_input.state.nn_map.values()))
-        key = (hierarchy, sub_key)
-        return key
 
     def compute_embs(self, x1_in, x2_in, edge_index1, edge_index2):
         x1_out, x2_out, _, _, _ = self.gnn_main(x1_in, x2_in, edge_index1, edge_index2)
@@ -689,3 +681,22 @@ def _get_dims(in_dim: int, out_dim: int) -> List[int]:
         dims.append(dim_val)
     dims = dims[:-1]
     return dims
+
+def get_state_key(dqn_input: DQNInput, ext=''):
+    """Encode some info about the graph state inside a tuple to be used as a key in the cache"""
+    hierarchy = f'state_{ext}'
+    sub_key = (dqn_input.pair_id,
+               frozenset(dqn_input.state.nn_map.keys()),
+               frozenset(dqn_input.state.nn_map.values()))
+    key = (hierarchy, sub_key)
+    return key
+
+def get_pair_key(dqn_input: DQNInput, ext=''):
+    """Encode some info about the graph pair inside a tuple to be used as a key in the cache"""
+    hierarchy = f'pair_{ext}'
+    exhausted_v, exhausted_w = frozenset(), frozenset()
+    sub_key = (dqn_input.state.cur_id, dqn_input.pair_id, exhausted_v, exhausted_w)
+    key = (hierarchy, sub_key)
+    return key
+
+

@@ -26,6 +26,7 @@ from data.src import *
 # MCSRL Procedure
 #########################################################################
 
+
 class MCSplitRLBacktrackScalable(BaseModel):
     def __init__(self, **kwargs):
         super(MCSplitRLBacktrackScalable, self).__init__()
@@ -57,7 +58,7 @@ class MCSplitRLBacktrackScalable(BaseModel):
             ('q_max', None) if opt.smart_bin_sampling else (None, 'biased'))
         self.buffer = BinBuffer(self.buffer_size, sample_strat=self.sample_strat, biased=self.biased,
                                 no_trivial_pairs=opt.no_trivial_pairs)
-        self.reward_calculator = RewardCalculator(opt.reward_calculator_mode, self.feat_map, self.calc_bound)
+        self.reward_calculator = RewardCalculator(opt.reward_calculator_mode, self.feat_map, calc_bound)
         self.dqn, self.dqn_tgt = [Q_network_v1(kwargs['encoder_type'], kwargs['embedder_type'],
                                                int(kwargs['in_dim']), int(kwargs['n_dim']), int(kwargs['n_layers']),
                                                kwargs['GNN_mode'], eval(kwargs['learn_embs']),
@@ -136,7 +137,7 @@ class MCSplitRLBacktrackScalable(BaseModel):
             if recursion_count%500 == 0 and opt.load_model is not None:
                 saver.log_info(f'on iteration {recursion_count}:\t{len(incumbent)}')
 
-            # pop from stack
+            # pop state from stack
             cur_state, promise, incumbent_local_len, since_last_update_count = \
                 self.sample_search_stack(
                     search_stack,
@@ -156,17 +157,19 @@ class MCSplitRLBacktrackScalable(BaseModel):
             if self.exit_condition(recursion_count, timer, since_last_update_count):
                 break
 
+            # get action space data ⇒ get all the possible actions that can be taken from this state
             action_space_data = \
                 get_action_space_data_wrapper(cur_state, is_mcsp=self.get_is_mcsp())
 
-            pruned, search_stack = self.prune_condition(cur_state, action_space_data, incumbent,
-                                                        search_stack, search_tree)
+            # Prune this state if it is not promising
+            pruned, search_stack = self.prune_condition(cur_state, action_space_data, incumbent, search_stack)
             if pruned:
                 if self.training and self.search_path:
                     break
                 else:
                     continue
 
+            # Select one action and run it
             action_edge, next_state, promise_tuple, q_pred = self._forward_single_edge(cur_state, action_space_data,
                                                                                        recursion_count)
 
@@ -196,8 +199,7 @@ class MCSplitRLBacktrackScalable(BaseModel):
 
         return search_tree, incumbent
 
-    def _forward_single_edge(self, state, action_space_data, recursion_count):
-
+    def _forward_single_edge(self, state: StateNode, action_space_data:ActionSpaceDataScalable, recursion_count:int):
         # estimate the q values
         if 'fixedv' in self.DQN_mode:
             mode = self.DQN_mode.split('_')[-1]
@@ -481,10 +483,10 @@ class MCSplitRLBacktrackScalable(BaseModel):
                 f'exit condition met at recursion {recursion_count}, time: {timer.get_duration()}, since_last_update_count: {since_last_update_count}')
         return _exit
 
-    def prune_condition(self, cur_state, action_space_data, incumbent,
-                        search_stack, search_tree):
-        # compute bound
-        bound = self.calc_bound(cur_state)
+    def prune_condition(self, cur_state: StateNode, action_space_data: ActionSpaceDataScalable, incumbent: dict,
+                        search_stack: StackHeap) -> (bool, StackHeap):
+        # compute upper bound on solution size
+        bound = calc_bound(cur_state)
 
         # check prune conditions
         empty_action_space = len(action_space_data.natts2bds_unexhausted) == 0
@@ -514,28 +516,10 @@ class MCSplitRLBacktrackScalable(BaseModel):
 
         return buffer_entry_list
 
-    def calc_bound(self, state, exhaust_revisited_nodes=True):
-        natts2g2nids = state.natts2g2nids
-        natts2bds = state.natts2bds
-        nn_map = state.nn_map
-
-        # MUST USE UNFILTERED natts2bds OTHERWISE WILL DROP THE EXHAUSTED NODES!
-        natts2g2abd_sg_nids = \
-            get_natts2g2abd_sg_nids(natts2g2nids, natts2bds, nn_map)
-
-        if exhaust_revisited_nodes:
-            assert state is not None
-            natts2bds_filtered = state.get_natts2bds_abd_unexhausted()
-        else:
-            natts2bds_filtered = state.natts2bds
-
-        return \
-            calc_bound_helper(natts2bds_filtered, natts2g2nids, natts2g2abd_sg_nids)
-
     ##########################################################
     # Utility functions (forward single edge procedure)
     ##########################################################
-    def compute_q_vec(self, state, action_space_data):
+    def compute_q_vec(self, state: StateNode, action_space_data: ActionSpaceDataScalable):
         # estimate the q values
         if len(action_space_data.action_space[0]) > 1 or opt.plot_final_tree:
             # we want all q_pred if we are plotting tree!
@@ -1059,6 +1043,23 @@ def group_by_graph_nodes_by_type(g1: Graph, g2: Graph) -> Dict[int, Dict[str, Se
     return natts2g2nids
 
 
+def calc_bound(state: StateNode, exhaust_revisited_nodes=True):
+    natts2g2nids = state.natts2g2nids
+    natts2bds = state.natts2bds
+    nn_map = state.nn_map
+
+    # MUST USE UNFILTERED natts2bds OTHERWISE WILL DROP THE EXHAUSTED NODES!
+    natts2g2abd_sg_nids = get_natts2g2abd_sg_nids(natts2g2nids, natts2bds, nn_map)
+
+    if exhaust_revisited_nodes:
+        assert state is not None
+        natts2bds_filtered = state.get_natts2bds_abd_unexhausted()
+    else:
+        natts2bds_filtered = state.natts2bds
+
+    return calc_bound_helper(natts2bds_filtered, natts2g2nids, natts2g2abd_sg_nids)
+
+
 def calc_bound_helper(natts2bds: dict, natts2g2nids: dict, natts2g2abd_sg_nids: dict) -> int:
     """
     Compute the size of the best solution we could have with the current bidomains (solution upper bound).
@@ -1087,6 +1088,3 @@ def calc_bound_helper(natts2bds: dict, natts2g2nids: dict, natts2g2abd_sg_nids: 
     for left_len, right_len in bd_lens:
         bound += min(left_len, right_len)
     return bound
-
-
-

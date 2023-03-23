@@ -1,7 +1,9 @@
 from __future__ import annotations
+from typing import Union
 from options import opt
 from .bidomain import *
 from collections import defaultdict
+
 
 class ActionSpaceData:
     def __init__(self, action_space, unexhausted_bds, bds, bdids):
@@ -19,8 +21,20 @@ class ActionSpaceData:
 
 
 class ActionSpaceDataScalable:
+    """
+    Attributes:
+        action_space: list of 3 lists : [
+            indices of nodes in left graph,
+            indices of nodes in right graph,
+            indices of the bidomain
+            ].
+            All lists have N elements, and together they represent N possible node pairings between the 2 graphs.
+        natts2bds_unexhausted: list all unpruned bidomains.
+        action_space_size_unexhausted_unpruned: number of nodes in the unpruned bidomains.
+    """
+
     def __init__(self,
-                 action_space: List[List[int], List[int], List[int]],
+                 action_space: List[List[int]],
                  natts2bds_unexhausted: Dict[str, list],
                  action_space_size_unexhausted_unpruned: int):
         self.action_space = action_space
@@ -32,6 +46,10 @@ class ActionSpaceDataScalable:
             for bd in bds:
                 if v in bd.left and w in bd.right:
                     self.action_space = [[v], [w], [bd.bid]]
+
+
+# define ActionSpace type
+ActionSpace = Union[ActionSpaceData, ActionSpaceDataScalable]
 
 
 def get_action_space_data_wrapper(state: any, is_mcsp=False) -> ActionSpaceDataScalable:
@@ -84,6 +102,7 @@ def get_action_space_data_wrapper(state: any, is_mcsp=False) -> ActionSpaceDataS
 
     return action_space_data
 
+
 def get_action_space_size_unexhausted_unpruned(natts2bds: Dict[str, List[Bidomain]]) -> int:
     """Get size of action space = sum of the sizes of all bidomains for all node attributes"""
     as_size = 0
@@ -91,6 +110,7 @@ def get_action_space_size_unexhausted_unpruned(natts2bds: Dict[str, List[Bidomai
         for bd in bds:
             as_size += len(bd)
     return as_size
+
 
 def get_prune_parameters(is_mcsp: bool) -> (int | float, float, float):
     if is_mcsp:
@@ -116,7 +136,7 @@ def get_empty_action_space_data(state):
     return action_space_data
 
 
-def format_action_space(bds: list, state) -> List[List[int], List[int], List[int]]:
+def format_action_space(bds: list, state) -> [List[int], List[int], List[int]]:
     left_indices = []
     right_indices = []
     bd_indices = []

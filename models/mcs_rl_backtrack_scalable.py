@@ -3,26 +3,22 @@ from collections import defaultdict
 import random
 from torch.nn import MSELoss, BCEWithLogitsLoss
 from models.base_model import BaseModel, ModelParams
-from utils.options import parse_bool
-from utils.validation import validate, IS_POSITIVE, IS_BETWEEN_0_AND_1
 from copy import deepcopy
 import numpy as np
 import torch
 from torch import Tensor
 from torch.nn.functional import softmax
+from utils.options import parse_bool
+from utils.validation import validate, IS_POSITIVE, IS_BETWEEN_0_AND_1
 from utils.graph import create_edge_index, create_adj_set
 from utils.timer import OurTimer
-from utils.data_structures.search_tree import Bidomain, StateNode, ActionEdge, SearchTree, ActionSpaceDataScalable, \
-    unroll_bidomains, get_natts_hash, get_natts2g2abd_sg_nids
-from utils.data_structures.buffer import BinBuffer
-from utils.data_structures.common import StackHeap, DoubleDict
-from utils.data_structures.dqn_input import DQNInput
-from models.dqn import Q_network_v1
+from data_structures import *
 from utils.reward_calculator import RewardCalculator
 from utils.saver import saver
-from options import opt
 from utils.mc_split import McspVec, BufferEntry, ForwardConfig, MethodConfig, IMITATION_MODE, PRETRAIN_MODE, TRAIN_MODE, \
     TEST_MODE
+from models.dqn import Q_network_v1
+from options import opt
 from data.src import *
 
 
@@ -90,9 +86,10 @@ class MCSplitRLBacktrackScalable(BaseModel):
         methods = opt.val_method_list if forward_mode == TEST_MODE else (
             ['dqn'] if forward_mode == TRAIN_MODE else ['mcspv2'])
         for method in methods:
-            # run forward model
             self.apply_method_config(self.method_config_dict[method])
+            # Initialize search tree. Define the initial state for each graph pair.
             pair_list, state_init_list = self._preprocess_forward(x.ins, x.batch_data, x.cur_id)
+            # run forward model.
             self._forward_batch(pair_list, state_init_list)
 
         if forward_mode != TEST_MODE:
@@ -107,7 +104,7 @@ class MCSplitRLBacktrackScalable(BaseModel):
 
         return loss
 
-    def _forward_batch(self, pair_list: List[GraphPair], state_init_list: List[StateNode]):
+    def _forward_batch(self, pair_list: List[GraphPair], state_init_list: List[StateNode]) -> None:
         for pair, state_init in zip(pair_list, state_init_list):
             # run the search procedure
             search_tree = self._forward_single_tree(state_init)
@@ -117,7 +114,7 @@ class MCSplitRLBacktrackScalable(BaseModel):
                 buffer_entry_list = self.search_tree2buffer_entry_list(search_tree, pair)
                 self.buffer.extend(buffer_entry_list)
 
-    def _forward_single_tree(self, state_init):
+    def _forward_single_tree(self, state_init: StateNode):
         # initializations
         search_stack = StackHeap()
         search_stack.add(state_init, 0)
@@ -133,7 +130,7 @@ class MCSplitRLBacktrackScalable(BaseModel):
         incumbent = {}
         incumbent_local_len = len(incumbent)
         if opt.load_model is not None:
-            saver.log_info('search starting!')
+            saver.log_info('testing starting!')
         while len(search_stack) != 0:
             recursion_count += 1
             if recursion_count%500 == 0 and opt.load_model is not None:
@@ -148,7 +145,6 @@ class MCSplitRLBacktrackScalable(BaseModel):
 
             # update incumbent
             if self.is_better_solution(cur_state, len(incumbent)):
-                # print(f'on iteration {recursion_count}:\t{len(incumbent)}')
                 incumbent = deepcopy(cur_state.nn_map)
                 incumbent_list.append(
                     [incumbent, recursion_count, timer.get_duration()])
@@ -161,7 +157,7 @@ class MCSplitRLBacktrackScalable(BaseModel):
                 break
 
             action_space_data = \
-                self.get_action_space_data_wrapper(cur_state, is_mcsp=self.get_is_mcsp())
+                get_action_space_data_wrapper(cur_state, is_mcsp=self.get_is_mcsp())
 
             pruned, search_stack = self.prune_condition(cur_state, action_space_data, incumbent,
                                                         search_stack, search_tree)
@@ -372,163 +368,6 @@ class MCSplitRLBacktrackScalable(BaseModel):
         self.DQN_mode = method_config.DQN_mode
         self.regret_iters = method_config.regret_iters
 
-    def get_action_space_data_wrapper(self, state, is_mcsp=False):
-        # get action space
-        natts2bds_unexhausted = state.get_natts2bds_unexhausted(with_bids=True)
-
-        action_space_size_unexhausted_unpruned = \
-            self.get_action_space_size_unexhausted_unpruned(natts2bds_unexhausted)
-        bidomains = unroll_bidomains(natts2bds_unexhausted)
-
-        if len(bidomains) == 0:
-            action_space = self._get_empty_action_space()
-            assert natts2bds_unexhausted == dict()
-            natts2bds_pruned = natts2bds_unexhausted
-        else:
-            num_bds, num_nodes_degree, num_nodes_dqn = \
-                self._get_prune_parameters(is_mcsp)
-            increase_degree = int(min(1, num_nodes_degree*1.4142135623))
-            increase_dqn = int(min(1, num_nodes_dqn*1.4142135623))
-            action_space = [[], [], []]
-
-            # print(f'Here I am {len(bidomains)} ismcsp {is_mcsp}: l ({[len(bd.left) for bd in bidomains]}) r ({[len(bd.right) for bd in bidomains]})')
-            # print(f'State nn_map: {state.nn_map}')
-            # print(f'State pruned states: {state.pruned_actions}')
-
-            while (len(action_space[0]) == 0):  # TODO: make this more efficient
-                num_nodes_degree += increase_degree
-                num_nodes_dqn += increase_dqn
-
-                # prune topK adjacent bidomains
-                bds_pruned = \
-                    self._prune_topk_bidomains(bidomains, num_bds)
-
-                # prune top(L1/#bidomains) nodes
-                bds_pruned = \
-                    self._prune_topk_nodes(bds_pruned, num_nodes_degree, state, 'deg')
-
-                natts2bds_pruned = defaultdict(list)
-                for bd in bds_pruned:
-                    natts2bds_pruned[bd.natts].append(bd)
-
-                # get possible node pairs from list of bidomains
-                # all combinations of nodes from bd.left and bd.right for all bds
-                if is_mcsp and len(state.nn_map) == 0:
-                    # bds_pruned_i = invert_bds(natts2bds_pruned, state)
-                    action_space = self._get_empty_action_space()
-                    break
-                else:
-                    action_space = self._format_action_space(bds_pruned, state)
-
-        # put action space into a wrapper
-        action_space_data = \
-            ActionSpaceDataScalable(
-                action_space,
-                natts2bds_pruned,
-                action_space_size_unexhausted_unpruned
-            )
-
-        return action_space_data
-
-    def _get_prune_parameters(self, is_mcsp):
-        if is_mcsp:
-            num_bds = 1
-            num_nodes_degree = float('inf')
-            num_nodes_dqn = float('inf')
-        else:
-            num_bds = float('inf') if opt.num_bds_max < 0 else opt.num_bds_max
-            num_nodes_degree = float('inf') if opt.num_nodes_degree_max < 0 else opt.num_nodes_degree_max
-            num_nodes_dqn = float('inf') if opt.num_nodes_dqn_max < 0 else opt.num_nodes_dqn_max
-
-        return num_bds, num_nodes_degree, num_nodes_dqn
-
-    def _prune_topk_bidomains(self, bidomains, num_bds):
-        # select for topk bidomains
-        prune_flag = len(bidomains) > num_bds
-        if prune_flag:
-            bds_pruned = \
-                self._filter_topk_bds_by_size(bidomains, num_bds)
-        else:
-            bds_pruned = bidomains
-
-        return bds_pruned
-
-    def _prune_topk_nodes(self, bidomains, num_nodes, state, method):
-        # get L value (max number of nodes in each bidomain)
-        num_nodes_per_bd = num_nodes//len(bidomains)
-
-        # prune for topl nodes
-        bds_pruned, bdids_pruned = [], []
-        for k, bd in enumerate(bidomains):
-            prune_flag_l = len(bd.left) > num_nodes_per_bd
-            prune_flag_r = len(bd.right) > num_nodes_per_bd
-            if prune_flag_l:
-                if method == 'deg':
-                    left_domain = self._filter_topk_nodes_by_degree(
-                        bd.left, num_nodes_per_bd, state.g1)
-                else:
-                    assert False
-            else:
-                left_domain = bd.left
-            if prune_flag_r:
-                if method == 'deg':
-                    right_domain = self._filter_topk_nodes_by_degree(
-                        bd.right, num_nodes_per_bd, state.g2)
-                else:
-                    assert False
-            else:
-                right_domain = bd.right
-
-            if prune_flag_l or prune_flag_r:
-                bds_pruned.append(Bidomain(left_domain, right_domain, None, bd.natts, bd.bid))
-            else:
-                bds_pruned.append(bd)
-        return bds_pruned
-
-    def _get_empty_action_space_data(self, state):
-        natts2bds_unexhausted = state.get_natts2bds_unexhausted(with_bids=True)
-        action_space_data = \
-            ActionSpaceDataScalable(self._get_empty_action_space(), natts2bds_unexhausted, None)
-        return action_space_data
-
-    def _get_empty_action_space(self):
-        return [[], [], []]
-
-    def _format_action_space(self, bds, state):
-        left_indices = []
-        right_indices = []
-        bd_indices = []
-        # soft matching: possibly give diff scores to pairs
-        for bd in bds:
-            for v in bd.left:
-                for w in bd.right:
-                    # bds only contain unexhausted nodes NOT unexhausted edges
-                    #   -> MUST check here to ensure nodes aren't revisited!
-                    if v in state.pruned_actions.l2r and w in state.pruned_actions.l2r[v]:
-                        continue
-                    left_indices.append(v)
-                    right_indices.append(w)
-                    bd_indices.append(bd.bid)
-
-        action_space = [left_indices, right_indices, bd_indices]
-        assert len(left_indices) == len(right_indices) == len(bd_indices)
-        return action_space
-
-    def _filter_topk_bds_by_size(self, bidomains, num_bds_max):
-        degree_list = np.array([max(len(bd.left), len(bd.right)) for bd in bidomains])
-        if opt.inverse_bd_size_order:
-            degree_list_sorted = degree_list.argsort(kind='mergesort')[::-1]
-        else:
-            degree_list_sorted = degree_list.argsort(kind='mergesort')
-        indices = degree_list_sorted[:num_bds_max]
-        return [bidomains[idx] for idx in indices]
-
-    def _filter_topk_nodes_by_degree(self, all_nodes, num_nodes_max, g):
-        nodes = list(all_nodes)
-        degree_list = np.array([g.degree[node] for node in nodes])
-        indices = degree_list.argsort(kind='mergesort')[-num_nodes_max:][::-1]
-        return [nodes[idx] for idx in indices]
-
     ##########################################################
     # Utility functions (forward procedure)
     ##########################################################
@@ -545,7 +384,7 @@ class MCSplitRLBacktrackScalable(BaseModel):
                                                  offset)  # Compute their tensors from the contiguous one (ins) and update offset
             edge_index1, edge_index2 = create_edge_index(g1), create_edge_index(
                 g2)  # Create indexes for the edges of each graph. Tensor of shape [2, 2*|E|]
-            # FIXME not an actual adjacency list! For each node, it contains the indices of the edges that are incident to it (edge stored in edge_index).
+            # FIXME @Hilicot not an actual adjacency list! For each node, it contains the indices of the edges that are incident to it (edge stored in edge_index).
             #       Consider transofrming into actual adjacency list, or give it a less misleading name
             adj_list1, adj_list2 = create_adj_set(g1), create_adj_set(g2)  # Create adjacency matrix for each graph
             nn_map = {}
@@ -604,14 +443,13 @@ class MCSplitRLBacktrackScalable(BaseModel):
     ##########################################################
     # Utility functions (forward single tree procedure)
     ##########################################################
-    def sample_search_stack(self, search_stack, incumbent_local_len, since_last_update_count):
-        if self.regret_iters is None:
-            method = 'stack'
+    def sample_search_stack(self, search_stack: StackHeap, incumbent_local_len: int,
+                            since_last_update_count: int) -> (StateNode, int, int, int):
+        """ Pop a node from the search stack. Return also the promise of the new state."""
+        if self.regret_iters is not None and since_last_update_count > self.regret_iters:
+            method = 'heap'
         else:
-            if since_last_update_count > self.regret_iters:
-                method = 'heap'
-            else:
-                method = 'stack'
+            method = 'stack'
 
         cur_state, promise = search_stack.pop_task(method)
 
@@ -628,15 +466,20 @@ class MCSplitRLBacktrackScalable(BaseModel):
                 assert False
         return cur_state, promise, incumbent_local_len, since_last_update_count
 
-    def is_better_solution(self, cur_state, incumbent_len):
+    @staticmethod
+    def is_better_solution(cur_state: StateNode, incumbent_len: int):
         return len(cur_state.nn_map) > incumbent_len
 
-    def exit_condition(self, recursion_count, timer, since_last_update_count):
+    def exit_condition(self, recursion_count: int, timer: OurTimer, since_last_update_count: int) -> bool:
         # exit search if recursion threshold
-        recursion_thresh = (
-                                   self.recursion_threshold is not None) and recursion_count > self.recursion_threshold
+        recursion_thresh = (self.recursion_threshold is not None) and recursion_count > self.recursion_threshold
         timout_thresh = self.total_runtime is not None and timer.get_duration() > self.total_runtime
-        return recursion_thresh and timout_thresh
+        # TODO add condition for no improvement in a while (exit if since_last_update_count > self.no_improvements_iters_threshold)
+        _exit = recursion_thresh and timout_thresh
+        if _exit:
+            logging.debug(
+                f'exit condition met at recursion {recursion_count}, time: {timer.get_duration()}, since_last_update_count: {since_last_update_count}')
+        return _exit
 
     def prune_condition(self, cur_state, action_space_data, incumbent,
                         search_stack, search_tree):
@@ -974,7 +817,7 @@ class MCSplitRLBacktrackScalable(BaseModel):
     def find_promise(self, next_state, action_space_data):
         promise = action_space_data.action_space_size_unexhausted_unpruned
         promise_new_state = \
-            self.get_action_space_size_unexhausted_unpruned(
+            get_action_space_size_unexhausted_unpruned(
                 next_state.get_natts2bds_unexhausted(with_bids=True)
             )
         promise, promise_new_state = -promise, -promise_new_state
@@ -1061,10 +904,10 @@ class MCSplitRLBacktrackScalable(BaseModel):
 
         # compute q pred
         next_action_space_data = \
-            self.get_action_space_data_wrapper(next_state, is_mcsp=self.get_is_mcsp())
+            get_action_space_data_wrapper(next_state, is_mcsp=self.get_is_mcsp())
 
         v, w = edge.action
-        action_space_data = self._get_empty_action_space_data(state)
+        action_space_data = get_empty_action_space_data(state)
         action_space_data.filter_action_space_data(v, w)
         q_pred = self._Q_network(state, action_space_data, tgt_network=False)
         q_pred = torch.squeeze(q_pred)
@@ -1139,7 +982,7 @@ class MCSplitRLBacktrackScalable(BaseModel):
 
             q_max = 0.0
             for cum_reward, end_state, num_steps in cum_reward_end_state_li:
-                cur_next_state_action_space = self.get_action_space_data_wrapper(end_state, is_mcsp=self.get_is_mcsp())
+                cur_next_state_action_space = get_action_space_data_wrapper(end_state, is_mcsp=self.get_is_mcsp())
                 q_max_tgt = self._compute_tgt_q_max(end_state, cur_next_state_action_space)
                 discount_factor = self.reward_calculator.discount**num_steps
                 q_max += cum_reward + discount_factor*q_max_tgt
@@ -1185,13 +1028,6 @@ class MCSplitRLBacktrackScalable(BaseModel):
             )
 
         self.debug_train_iter_counter += 1
-
-    def get_action_space_size_unexhausted_unpruned(self, natts2bds):
-        as_size = 0
-        for natts, bds in natts2bds.items():
-            for bd in bds:
-                as_size += len(bd)
-        return as_size
 
     def get_loss_input_li(self, buffer_entry):
         loss_input_li = []
@@ -1251,3 +1087,6 @@ def calc_bound_helper(natts2bds: dict, natts2g2nids: dict, natts2g2abd_sg_nids: 
     for left_len, right_len in bd_lens:
         bound += min(left_len, right_len)
     return bound
+
+
+

@@ -1,7 +1,7 @@
 import torch.nn as nn
 import torch
-from utils.data_structures.dqn_input import DQNInput
-from utils.data_structures.search_tree import ActionSpaceData, ActionSpaceDataScalable
+from data_structures.dqn_input import DQNInput
+from data_structures.action_space import ActionSpaceData, ActionSpaceDataScalable
 from options import opt
 from models.dvn import DVN
 

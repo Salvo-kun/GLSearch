@@ -52,3 +52,14 @@ logging.basicConfig(
     format=log_format,
     datefmt=dateformat,
     handlers=handlers)
+
+#-----------------------------
+# Check opt validity
+#-----------------------------
+
+# Check that phase and load_model are correct. (legacy code tends to check phase by reading load_model)
+if opt.phase == 'train' and opt.load_model is not None:
+    logging.warning("When training, you should not specify a model to load (--load_model parameter should be not specified).")
+elif opt.phase == 'test' and opt.load_model is None:
+    raise ValueError("When testing, you should specify a model to load (--load_model parameter should be specified).")
+

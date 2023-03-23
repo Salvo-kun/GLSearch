@@ -1,3 +1,4 @@
+from options import opt
 from tensorboardX import SummaryWriter
 from collections import OrderedDict
 from pprint import pprint
@@ -5,8 +6,11 @@ from os.path import join
 import torch
 import networkx as nx
 import numpy as np
-from options import opt
 from utils.common import get_ts, create_dir_if_not_exists, save, get_our_dir, get_model_info_as_str, get_model_info_as_command, plot_scatter_line, plot_dist
+import logging
+
+# TODO adapt saver to use the loggin module (discard LEGACY_SAVER) @Hilicot
+USE_LEGACY_SAVER = True
 
 class Saver(object):
     def __init__(self):
@@ -58,10 +62,11 @@ class Saver(object):
         self.model_info_f.close()  # TODO: check if future if we write more to it
 
     def log_info(self, s):
-        print(s)
-        if not hasattr(self, 'log_f'):
-            self.log_f = self._open('log.txt')
-        self.log_f.write('{}\n'.format(s))
+        logging.info(s)
+        if USE_LEGACY_SAVER:
+            if not hasattr(self, 'log_f'):
+                self.log_f = self._open('log.txt')
+            self.log_f.write('{}\n'.format(s))
 
     def log_info_new_file(self, s, fn):
         # print(s)

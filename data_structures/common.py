@@ -15,8 +15,8 @@ https://docs.python.org/3/library/heapq.html
 '''
 class StackHeap:
     def __init__(self):
-        self.pq = []  # list of entries arranged in a heap
-        self.sk = []
+        self.pq = []  # list of entries arranged in a heap, ordered by priority
+        self.sk = []  # list of entries arranged in a stack
         self.entry_finder = {}  # mapping of tasks to entries
         self.REMOVED = '<removed-task>'  # placeholder for a removed task
         self.counter = itertools.count()  # unique sequence count
@@ -25,7 +25,7 @@ class StackHeap:
         return len(self.sk)
 
     def add(self, task, priority=0, front=False):
-        'Add a new task or update the priority of an existing task'
+        """Add a new task or update the priority of an existing task. Lower priority is more important."""
         if task in self.entry_finder:
             self.remove_task(task, delete=False)
         count = next(self.counter)
@@ -38,7 +38,7 @@ class StackHeap:
             self.sk.append(entry)
 
     def remove_task(self, task, delete):
-        'Mark an existing task as REMOVED.  Raise KeyError if not found.'
+        """Mark an existing task as REMOVED.  Raise KeyError if not found."""
         if delete:
             entry = self.entry_finder[task]
             self.sk.remove(entry)
@@ -60,7 +60,7 @@ class StackHeap:
             assert False
         return task, priority
 
-    def pop_task(self, method):
+    def pop_task(self, method:str) -> (any, int):
         if method == 'heap':
             # Remove and return the lowest priority task.
             # Raise KeyError if empty.

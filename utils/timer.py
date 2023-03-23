@@ -1,6 +1,7 @@
 from collections import OrderedDict
 from time import time
 import numpy as np
+import logging
 
 class OurTimer(object):
     def __init__(self):
@@ -18,25 +19,25 @@ class OurTimer(object):
             rtn = duration
         else:
             rtn = format_seconds(duration)
-        print(log_str, '\t\t', rtn)
+        logging.info(log_str, '\t\t', rtn)
         return rtn
 
     def start_timing(self):
         self.t = time()
 
     def print_durations_log(self):
-        print('Timer log', '*' * 50)
+        logging.info('Timer log', '*' * 50)
         rtn = []
         tot_duration = sum([sec for sec in self.durations_log.values()])
-        print('Total duration:', format_seconds(tot_duration))
+        logging.info('Total duration:', format_seconds(tot_duration))
         lss = np.max([len(s) for s in self.durations_log.keys()])
         for log_str, duration in self.durations_log.items():
             s = '{0}{1} : {2} ({3:.2%})'.format(
                 log_str, ' ' * (lss - len(log_str)), format_seconds(duration),
                          duration / tot_duration)
             rtn.append(s)
-            print(s)
-        print('Timer log', '*' * 50)
+            logging.info(s)
+        logging.info('Timer log', '*' * 50)
         self.durations_log = OrderedDict() # reset
         return rtn
 

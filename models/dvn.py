@@ -9,7 +9,7 @@ from options import opt
 from models.gnn_propagator import GNNPropagator
 from models.mlp import MLP
 from utils.layers import create_act
-from utils.data_structures.search_tree import unroll_bidomains, get_natts2g2abd_sg_nids
+from data_structures import *
 import math
 import torch.nn.functional as F
 from collections import defaultdict

@@ -1,5 +1,5 @@
 from collections import deque, Counter, defaultdict
-from utils.data_structures.search_tree import unroll_bidomains
+from .bidomain import unroll_bidomains
 import numpy as np
 from options import opt
 

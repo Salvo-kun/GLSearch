@@ -1,5 +1,5 @@
 import torch
-from utils.data_structures.search_tree import ActionSpaceData
+from .action_space import ActionSpaceData
 from options import opt
 
 class DQNInput:

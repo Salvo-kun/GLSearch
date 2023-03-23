@@ -10,10 +10,7 @@ import numpy as np
 import torch
 from utils.graph import create_edge_index, create_adj_set
 from utils.timer import OurTimer
-from utils.data_structures.search_tree import Bidomain, StateNode, ActionEdge, SearchTree, ActionSpaceData
-from utils.data_structures.buffer import BinBuffer
-from utils.data_structures.common import StackHeap, DoubleDict
-from utils.data_structures.dqn_input import DQNInput
+from data_structures import *
 from models.dqn import Q_network_v1
 from utils.reward_calculator import RewardCalculator
 from utils.saver import saver

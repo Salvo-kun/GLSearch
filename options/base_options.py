@@ -1,8 +1,7 @@
 import argparse
 import os
-from utils.validation import null_coalescence
 
-class BaseOptions():
+class BaseOptions:
     def __init__(self):
         self.parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
         self.initialized = False
@@ -148,3 +147,10 @@ class BaseOptions():
         self.opt.scalable = null_coalescence(self.opt.scalable, True if len(self.opt.dataset_list) == 1 else False)
                 
         return self.opt
+
+
+def null_coalescence(current_value, default_value):
+    if current_value is None:
+        return default_value
+
+    return current_value

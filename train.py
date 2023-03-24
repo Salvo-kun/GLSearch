@@ -4,6 +4,7 @@ from torch.utils.data import DataLoader
 from torch.optim import Adam
 from data import BatchData, load_dataset_list
 from models.gl_search import GLSearch, ModelParams
+from utils.visualizer import plot_graphs
 import logging
 
 torch.autograd.set_detect_anomaly(True)
@@ -31,10 +32,15 @@ def train():
                 return
 
             batch_data = BatchData(data, curriculum_dataset.dataset)
-            print(f'CID: {curriculum_id} \t Iter: {num_iters}')
+            logging.info(f'CID: {curriculum_id} \t Iter: {num_iters}')
             # print(f'Indices: {batch_data.merge_data["ind_list"]}')
             # print(f'Dataset: {curriculum_dataset.dataset}')
             # print(f'Ins: {batch_data.merge_data["merge"].x}')
+
+            # plot graphs (for debugging, can be moved inside loading functions)
+            if num_iters == 0 and opt.plot_graphs_on_loading:
+                for pair in batch_data.pair_list:
+                    plot_graphs(pair.g1, pair.g2, batch_data.dataset.name)
 
             model.train()
             model.zero_grad()

@@ -3,7 +3,7 @@ from options import opt
 from torch.utils.data import DataLoader
 from torch.optim import Adam
 from data import BatchData, load_dataset_list
-from models.gl_search import GLSearch
+from models.gl_search import GLSearch, ModelParams
 from options import opt
 
 def test():
@@ -65,7 +65,7 @@ def test():
             
             model.train()
             model.zero_grad()
-            loss = model(curriculum_id, num_iters_total, batch_data)
+            loss = model(ModelParams(curriculum_id, num_iters_total, batch_data))
             
             if loss is not None:
                 if opt.retain_graph:

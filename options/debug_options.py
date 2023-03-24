@@ -63,6 +63,7 @@ class DebugOptionsObject:
                   ('syn:np_tr=20,np_te=20,nn_core=-1,nn_tot=66,ed=0.2|4,gen_type=WS', -1),
                   ], 2500),
             ]
+        self.plot_graphs_on_loading = True
 
         # FIXME legacy
         self.scalable = True
